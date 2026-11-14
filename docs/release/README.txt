@@ -1,10 +1,10 @@
-Cha-Cha {VERSION} for Windows x64
-A native PC port of Monster Hunter 3 Ultimate (Wii U), by static recompilation.
+Cha-Cha {VERSION} (JP v96) for Windows x64
+A native PC port of Monster Hunter 3G HD Ver. (Wii U, JP v96), by static recompilation.
 
 1. Extract the whole folder somewhere you can write to (not Program Files).
 2. Run Cha-Cha.exe.
-3. On first start, choose your own dump of Monster Hunter 3 Ultimate (US) with
-   update v32: a .wua archive, or the game and update folders (code, content,
+3. On first start, choose your own dump of Monster Hunter 3G HD Ver. (JP) with
+   update v96 (Title ID 0005000010104D00, MH3G_Cafe.rpx): a .wua archive, or the game and update folders (code, content,
    meta). The files are read where they are; nothing is copied. The port then prepares the game's shaders for your PC (a few
    seconds, once).
 
@@ -22,7 +22,7 @@ Settings > Gameplay > Monster HP scaling switches the Port Tanzia HP scaling off
 Online (very experimental): talk to Neko in Port Tanzia, then Host a Hunt or Join a
 Hunt. To play across your network, first turn on Settings > Gameplay > Online > Play
 over the network, only with people you trust. Steps are in the README on GitHub.
-Please report problems: https://github.com/SilversRayGA/Cha-Cha-Plus/issues
+Please report problems: https://github.com/m1mist/Cha-Cha-Plus/issues
 
 Mods: one folder each in the mods folder of the data folder (data\mods here).
 Damage Numbers comes with Cha-Cha (the damage of every hit over the monster);
@@ -37,7 +37,7 @@ included; nothing else needs installing.
 This archive contains no game assets, disc image, game executable or saves.
 The menus are drawn with the game's own GUI textures, read from your dump
 when Cha-Cha starts; none are included here.
-Only the US release with update v32 works: the recompiled code is specific to
+Only the JP release with update v96 (0005000010104D00 / MH3G_Cafe.rpx) works: the recompiled code is specific to
 that executable, and the setup screen checks it.
 
 Cha-Cha is free software under the GNU GPL v3.0 (LICENSE.txt); the source is on

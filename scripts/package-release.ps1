@@ -9,13 +9,15 @@ param(
     [string]$Version = ""
 )
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 $root = Split-Path -Parent $PSScriptRoot
 $bin = Join-Path $root "$BuildDir\runtime\boot\Release"
 $exe = Join-Path $bin "Cha-Cha.exe"
 if (-not (Test-Path $exe)) { throw "No Release build at $exe - build it first: cmake --build $BuildDir --config Release --target mh3u" }
 
-$commit = (git -C $root rev-parse --short HEAD).Trim()
-$dirty = (git -C $root status --porcelain --untracked-files=no) -ne $null
+$gitExe = if (Get-Command git -ErrorAction SilentlyContinue) { "git" } else { "C:\Program Files\Git\cmd\git.exe" }
+$commit = (& $gitExe -c "safe.directory=$root" -C $root rev-parse --short HEAD).Trim()
+$dirty = (& $gitExe -c "safe.directory=$root" -C $root status --porcelain --untracked-files=no) -ne $null
 if ($Version -eq "") { $Version = "dev-$commit" }
 $name = "Cha-Cha-$Version-windows-x64"
 $out = Join-Path $root "build\release"
@@ -46,7 +48,22 @@ Copy-Item (Join-Path $root "LICENSE") (Join-Path $stage "LICENSE.txt")  # Cha-Ch
 Copy-Item (Join-Path $root "docs\release\THIRD_PARTY_NOTICES.md") (Join-Path $stage "licenses")
 Copy-Item (Join-Path $root "$BuildDir\_deps\zstd-src\LICENSE") (Join-Path $stage "licenses\zstd-LICENSE.txt")
 Copy-Item (Join-Path $root "$BuildDir\_deps\imgui-src\LICENSE.txt") (Join-Path $stage "licenses\DearImGui-LICENSE.txt")
-$sdkVersion = Split-Path -Leaf $env:VULKAN_SDK
+$modsBuild = Join-Path $root "$BuildDir\mods"
+if (Test-Path $modsBuild) {
+    $dataMods = Join-Path $stage "data\mods"
+    Get-ChildItem $modsBuild -Directory | ForEach-Object {
+        $ini = Join-Path $_.FullName "mod.ini"
+        if (Test-Path $ini) {
+            $dst = Join-Path $dataMods $_.Name
+            New-Item -ItemType Directory -Force $dst | Out-Null
+            Copy-Item -Recurse -Force (Join-Path $_.FullName "*") $dst
+            $modReadme = Join-Path $root "mods\$($_.Name)\README.md"
+            if (Test-Path $modReadme) { Copy-Item $modReadme $dst }
+        }
+    }
+}
+
+$sdkVersion = if ($env:VULKAN_SDK) { Split-Path -Leaf $env:VULKAN_SDK } else { "unknown" }
 Set-Content -Encoding utf8 (Join-Path $stage "BUILDINFO.txt") @"
 Version: $Version
 Commit: $commit$(if ($dirty) { " (with uncommitted changes)" })
