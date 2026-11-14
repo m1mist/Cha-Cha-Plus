@@ -30,7 +30,8 @@ constexpr uint32_t kDamageCheck = 0x025CB6FC;
 constexpr const char* kGameSha1 = "cb908d6807891f4edb5b00fdf2a1d5688ee0b935";  // MH3G HD JP v96
 
 enum Style { kWilds, kRise, kClassic, kStyles };
-const char* const kStyleNames[kStyles] = {"Wilds", "Rise", "Classic"};
+const char* const kStyleNamesZh[kStyles] = {"荒野", "崛起", "经典"};
+const char* const kStyleNamesEn[kStyles] = {"Wilds", "Rise", "Classic"};
 const char* const kStyleKeys[kStyles] = {"wilds", "rise", "classic"};
 
 struct Settings {
@@ -312,19 +313,27 @@ bool save_settings() {
 }
 
 void on_settings(ChaChaPlugin*) {
-    api->ui_group("Settings");
-    api->ui_switch("Show damage numbers", &g_set.enabled, "Every hit on a monster shows the damage it did, over the monster.");
-    api->ui_switch("Show other damage", &g_set.other,
-                   "Also shows HP the monster lost that no hit on a part accounts for (bombs, poison and the like), in grey.");
-    api->ui_choice("Style", &g_set.style, kStyleNames, kStyles,
-                   "Wilds: outlined digits that pop in. Rise: slanted digits with a slash. Classic: small plain digits.");
-    api->ui_float("Number size", &g_set.scale, 0.5f, 3.0f, 0.1f, "%.1fx", "How big the numbers are. They follow the picture's height.");
-    api->ui_float("Duration", &g_set.lifetime, 0.4f, 2.0f, 0.1f, "%.1f s", "How long each number stays on screen.");
+    const bool zh = chacha_is_zh(api);
+    api->ui_group(zh ? "设置" : "Settings");
+    api->ui_switch(zh ? "显示伤害数字" : "Show damage numbers", &g_set.enabled,
+                   zh ? "每次命中怪物时，在怪物上方显示本次攻击造成的伤害。"
+                      : "Every hit on a monster shows the damage it did, over the monster.");
+    api->ui_switch(zh ? "显示其他伤害" : "Show other damage", &g_set.other,
+                   zh ? "同时以灰色显示非部位命中造成的怪物扣血（如爆弹、毒伤等）。"
+                      : "Also shows HP the monster lost that no hit on a part accounts for (bombs, poison and the like), in grey.");
+    api->ui_choice(zh ? "数字风格" : "Style", &g_set.style, zh ? kStyleNamesZh : kStyleNamesEn, kStyles,
+                   zh ? "荒野：带描边的弹出数字。崛起：斜体带斩击特效。经典：简洁小号数字。"
+                      : "Wilds: outlined digits that pop in. Rise: slanted digits with a slash. Classic: small plain digits.");
+    api->ui_float(zh ? "数字大小" : "Number size", &g_set.scale, 0.5f, 3.0f, 0.1f, "%.1fx",
+                  zh ? "控制伤害数字的显示大小，随画面高度等比缩放。" : "How big the numbers are. They follow the picture's height.");
+    api->ui_float(zh ? "持续时间" : "Duration", &g_set.lifetime, 0.4f, 2.0f, 0.1f, zh ? "%.1f 秒" : "%.1f s",
+                  zh ? "每个伤害数字在屏幕上停留的时间。" : "How long each number stays on screen.");
     publish();
 }
 // the Mods page's Save settings / Restore defaults (for all mods, at its end)
 void on_save(ChaChaPlugin*) {
-    if (!save_settings()) api->toast(self, "Damage Numbers: settings could not be saved");
+    if (!save_settings())
+        api->toast(self, chacha_is_zh(api) ? "伤害数字：无法保存设置" : "Damage Numbers: settings could not be saved");
 }
 void on_defaults(ChaChaPlugin*) {
     g_set = Settings{};

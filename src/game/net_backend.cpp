@@ -950,8 +950,9 @@ int16_t hub_interval() {
 enum class Step { Idle, ToHarbor, WaitHarbor, SignIn, WaitSignIn, OpenSession, WaitSession, Create, Search, WaitSearch, Join, WaitInSession, ToHall, WaitHall, InHall, Leave, WaitLeave, BackToHarbor };
 
 std::atomic<Step> g_step{Step::Idle};
+std::atomic<bool> g_zh{true};
 std::mutex g_status_lock;
-std::string g_status = "Not connected";
+std::string g_status_zh = "未连接", g_status_en = "Not connected";
 bool g_want_host = false;
 int g_step_frames = 0, g_search_tries = 0;
 ppc::GuestFunction g_swap = nullptr;
@@ -960,13 +961,16 @@ void (*g_toast)(const std::string&) = nullptr;
 constexpr uint32_t kFacilityText = 0x67;
 
 // tell: also on screen, for what the player has to know
-void set_status(const std::string& text, bool tell = false) {
+void set_status(const std::string& zh, const std::string& en, bool tell = false) {
     std::lock_guard g(g_status_lock);
-    if (g_status != text) {
-        std::printf("net: %s\n", text.c_str());
+    const std::string& text = g_zh ? zh : en;
+    const std::string& prev = g_zh ? g_status_zh : g_status_en;
+    if (prev != text) {
+        std::printf("net: %s\n", en.c_str());
         if (tell && g_toast) g_toast(text);
     }
-    g_status = text;
+    g_status_zh = zh;
+    g_status_en = en;
 }
 
 void go(Step step) {
@@ -974,8 +978,8 @@ void go(Step step) {
     g_step_frames = 0;
 }
 
-void fail(const std::string& text) {
-    set_status(text, true);
+void fail(const std::string& zh, const std::string& en) {
+    set_status(zh, en, true);
     go(Step::Idle);
 }
 
@@ -1069,7 +1073,7 @@ void take_request(uint8_t* base) {
     const uint32_t game = ppc::ld32(base, kGame);
     if (g_step != Step::Idle) return;
     if (game && ppc::ld8(base, game + 0x196) >= 2) {
-        set_status("Finish the quest first", true);
+        set_status("请先完成当前任务", "Finish the quest first", true);
         return;
     }
     if (const bool lan = g_want_lan.load(); g_socket != kNoSocket && lan != g_lan) {
@@ -1081,7 +1085,7 @@ void take_request(uint8_t* base) {
         g_lan = g_want_lan;
         g_direct_ip = g_want_direct_ip;
         if (!open_socket()) {
-            fail("No free network port");
+            fail("没有可用的网络端口", "No free network port");
             return;
         }
         g_node = static_cast<uint16_t>((static_cast<uint32_t>(std::time(nullptr)) * 31u) ^ (g_port * 257u));
@@ -1286,29 +1290,29 @@ void session_tick(ppc::Context& ctx, uint8_t* base) {
                 go(Step::SignIn);
                 break;
             }
-            set_status("Going to Port Tanzia", true);
+            set_status("正在前往坦吉亚港", "Going to Port Tanzia", true);
             set_sub_area(base, 0);
             change_area(ctx, base, kHarborSquare);
             go(Step::WaitHarbor);
             break;
         case Step::WaitHarbor:
             if (on_stage(base, kHarborStage, 0) && g_step_frames > kSettleFrames) go(Step::SignIn);
-            else if (timed_out) fail("Could not reach Port Tanzia");
+            else if (timed_out) fail("无法前往坦吉亚港", "Could not reach Port Tanzia");
             break;
         case Step::SignIn:
             if (state == kStateHub || state == kStateSessionHub || state == kStateSearched) {
                 go(Step::OpenSession);
             } else if (hunter_ready(base) && manager_idle(base) && g_step_frames > kSettleFrames) {
-                set_status("Signing in");
+                set_status("正在登录", "Signing in");
                 request_bits(base, net, kRequestSignIn);
                 go(Step::WaitSignIn);
             } else if (timed_out) {
-                fail("The game is busy; try again in town");
+                fail("游戏正忙，请在村镇中重试", "The game is busy; try again in town");
             }
             break;
         case Step::WaitSignIn:
             if (state == kStateHub) go(Step::OpenSession);
-            else if (state == kStateFailed || timed_out) fail("Sign-in failed");
+            else if (state == kStateFailed || timed_out) fail("登录失败", "Sign-in failed");
             break;
         case Step::OpenSession:
             if (state == kStateSessionHub || state == kStateSearched) {
@@ -1320,21 +1324,21 @@ void session_tick(ppc::Context& ctx, uint8_t* base) {
             break;
         case Step::WaitSession:
             if (state == kStateSessionHub) go(g_want_host ? Step::Create : Step::Search);
-            else if (timed_out) fail("Could not open a session");
+            else if (timed_out) fail("无法打开联机大厅界面", "Could not open a session");
             break;
         case Step::Create:
-            set_status("Creating a session", true);
+            set_status("正在创建房间", "Creating a session", true);
             request_bits(base, net, kRequestCreate);
             go(Step::WaitInSession);
             break;
         case Step::Search:
-            set_status("Looking for a session", true);
+            set_status("正在搜索房间", "Looking for a session", true);
             request_bits(base, net, kRequestSearch);
             go(Step::WaitSearch);
             break;
         case Step::WaitSearch: {
             if (state != kStateSearched || g_step_frames < kSearchPauseFrames) {
-                if (timed_out) fail("Search did not finish");
+                if (timed_out) fail("搜索超时", "Search did not finish");
                 break;
             }
             bool found;
@@ -1344,23 +1348,23 @@ void session_tick(ppc::Context& ctx, uint8_t* base) {
             }
             if (found) go(Step::Join);
             else if (++g_search_tries < kSearchTries) go(Step::Search);
-            else fail("No session found");
+            else fail("未找到房间", "No session found");
             break;
         }
         case Step::Join:
-            set_status("Joining", true);
+            set_status("正在加入房间", "Joining", true);
             ppc::st32(base, net + 0x8C4, 0);
             request_bits(base, net, kRequestJoin);
             go(Step::WaitInSession);
             break;
         case Step::WaitInSession:
             if (state == kStateInSession) go(Step::ToHall);
-            else if (timed_out) fail("Could not get into the session");
+            else if (timed_out) fail("无法进入房间", "Could not get into the session");
             break;
         case Step::ToHall:
             if (g_step_frames < kHallDelayFrames) break;
             if (cutscene_playing(base) && g_step_frames < kHallDelayFrames + kCutsceneWaitFrames) break;  // let it end: leaving now would strand its 30 FPS
-            set_status("Entering the hall");
+            set_status("正在进入集会所", "Entering the hall");
             set_sub_area(base, 1);
             change_area(ctx, base, kOnlineHall);
             go(Step::WaitHall);
@@ -1368,10 +1372,11 @@ void session_tick(ppc::Context& ctx, uint8_t* base) {
         case Step::WaitHall:
             end_stuck_cutscene(ctx, base);
             if (on_stage(base, kHarborStage, 1) && hunter_ready(base)) {
-                set_status(g_want_host ? "Hosting a hunt: others can join from Neko" : "Joined the hunt", true);
+                set_status(g_want_host ? "已创建联机房间：其他猎人可通过猫咪向导加入" : "已加入联机房间",
+                           g_want_host ? "Hosting a hunt: others can join from Neko" : "Joined the hunt", true);
                 go(Step::InHall);
             } else if (timed_out) {
-                fail("Could not enter the hall");
+                fail("无法进入集会所", "Could not enter the hall");
             }
             break;
         case Step::InHall:
@@ -1380,11 +1385,12 @@ void session_tick(ppc::Context& ctx, uint8_t* base) {
             } else {
                 quest_tick(ctx, base);
                 std::lock_guard g(g_wire);
-                set_status((g_want_host ? "Hosting, " : "In a session, ") + std::to_string(g_members.size()) + " hunter(s)");
+                set_status((g_want_host ? "房主模式，" : "已联机，") + std::to_string(g_members.size()) + " 名猎人",
+                           (g_want_host ? "Hosting, " : "In a session, ") + std::to_string(g_members.size()) + " hunter(s)");
             }
             break;
         case Step::Leave:
-            set_status("Leaving", true);
+            set_status("正在离开房间", "Leaving", true);
             request_bits(base, net, kRequestLeave);
             go(Step::WaitLeave);
             break;
@@ -1394,7 +1400,7 @@ void session_tick(ppc::Context& ctx, uint8_t* base) {
         case Step::BackToHarbor:
             set_sub_area(base, 0);
             change_area(ctx, base, kHarborSquare);
-            set_status("Not connected");
+            set_status("未连接", "Not connected");
             go(Step::Idle);
             break;
         case Step::Idle:
@@ -1434,6 +1440,7 @@ bool ferry_row_usable(uint32_t row) { return (g_step == Step::Idle) == (row != k
 void net_request(NetRequest request) { g_requested = static_cast<int>(request); }
 
 void net_set_toast(void (*toast)(const std::string&)) { g_toast = toast; }
+void net_set_language(const std::string& lang) { g_zh = (lang != "en"); }
 
 void net_configure(bool lan, const std::string& host_address) {
     g_want_lan = lan;
@@ -1443,7 +1450,7 @@ void net_configure(bool lan, const std::string& host_address) {
 
 std::string net_status() {
     std::lock_guard g(g_status_lock);
-    return g_status;
+    return g_zh ? g_status_zh : g_status_en;
 }
 
 bool net_can_request(NetRequest request) {

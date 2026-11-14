@@ -389,6 +389,9 @@ int main(int argc, char** argv) {
     const boot::AppPaths paths = boot::find_paths(argv[0], args.data_dir);
     setup_output(paths, args.console);
     boot::Settings settings = boot::load_settings(paths);
+    input::set_language(settings.language);
+    plugins::set_language(settings.language);
+    game::net_set_language(settings.language);
     std::printf("data folder: %s\n", paths.data.string().c_str());
 
     // The game: --game/--install paths, else config.ini, else (in the source checkout) extracted/ or game/*.wua.

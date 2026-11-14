@@ -130,6 +130,7 @@ Settings load_settings(const AppPaths& p) {
         else if (k == "monster_hp_scaling") s.monster_hp_scaling = on;
         else if (k == "online_lan") s.online_lan = on;
         else if (k == "online_host") s.online_host = v;
+        else if (k == "language") s.language = (v == "en" || v == "EN" || v == "en-US") ? "en" : "zh-CN";
     }
     return s;
 }
@@ -159,7 +160,8 @@ bool save_settings(const AppPaths& p, const Settings& s) {
       << "online_host=" << s.online_host << '\n'
       << "look=" << s.look << '\n'
       << "fps_limit=" << (s.fps_limit < 0 ? std::string("unlimited") : std::to_string(s.fps_limit)) << '\n'
-      << "vsync=" << (s.vsync ? 1 : 0) << '\n';
+      << "vsync=" << (s.vsync ? 1 : 0) << '\n'
+      << "language=" << s.language << '\n';
     return static_cast<bool>(f);
 }
 

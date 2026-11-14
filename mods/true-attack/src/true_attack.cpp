@@ -38,10 +38,12 @@ void after_display(void*, ChaChaCall* call) {
 }
 
 void on_settings(ChaChaPlugin*) {
-    api->ui_group("Settings");
-    if (api->ui_switch("Show true attack", &g_enabled,
-                       "Menus show the weapon's true attack (what the damage formula uses) instead of the bloated number. "
-                       "Applies at once; reopen a menu to see it.")) {
+    const bool zh = chacha_is_zh(api);
+    api->ui_group(zh ? "设置" : "Settings");
+    if (api->ui_switch(zh ? "显示真实攻击力" : "Show true attack", &g_enabled,
+                       zh ? "在菜单中显示武器的真实攻击力（伤害计算公式实际使用的数值），而非面板膨胀值。立即生效，重新打开菜单即可看到。"
+                          : "Menus show the weapon's true attack (what the damage formula uses) instead of the bloated number. "
+                            "Applies at once; reopen a menu to see it.")) {
         g_on = g_enabled != 0;
         api->config_set(self, "enabled", g_enabled ? "true" : "false");
         api->config_save(self);

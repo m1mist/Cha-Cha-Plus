@@ -285,17 +285,23 @@ void on_defaults(ChaChaPlugin*) {
     save_settings();
 }
 
-const char* const kSides[] = {"In the quest's row", "Left of the quest's row"};
+const char* const kSidesZh[] = {"任务行内右侧", "任务行左侧"};
+const char* const kSidesEn[] = {"In the quest's row", "Left of the quest's row"};
 
 void on_settings(ChaChaPlugin*) {
-    api->ui_group("Settings");
-    bool changed = api->ui_switch("Mark key quests", &g_set.enabled,
-                                  "A gold key on the Quest Counter's list for the quests that unlock the next urgent quest.") != 0;
-    changed |= api->ui_switch("Mark choices", &g_set.picks,
-                              "Where any few of a group will do (\"2 OF 5\": clear any two of the five marked).") != 0;
-    changed |= api->ui_switch("Mark urgent quests", &g_set.urgent, "URGENT on the urgent quests themselves.") != 0;
-    changed |= api->ui_choice("Tag position", &g_set.side, kSides, 2,
-                              "Where the mark sits: just left of the quest's row (on the list's edge), or inside the name's box at its right end.") != 0;
+    const bool zh = chacha_is_zh(api);
+    api->ui_group(zh ? "设置" : "Settings");
+    bool changed = api->ui_switch(zh ? "标记关键任务" : "Mark key quests", &g_set.enabled,
+                                  zh ? "在任务柜台列表中用金色钥匙图标标出解锁下一个紧急任务所需的关键任务。"
+                                     : "A gold key on the Quest Counter's list for the quests that unlock the next urgent quest.") != 0;
+    changed |= api->ui_switch(zh ? "标记任选任务" : "Mark choices", &g_set.picks,
+                              zh ? "当某组任务只需完成其中几项时进行标记（例如“2 OF 5”表示完成标记的 5 个任务中的任意 2 个）。"
+                                 : "Where any few of a group will do (\"2 OF 5\": clear any two of the five marked).") != 0;
+    changed |= api->ui_switch(zh ? "标记紧急任务" : "Mark urgent quests", &g_set.urgent,
+                              zh ? "在紧急任务上显示 URGENT 标记。" : "URGENT on the urgent quests themselves.") != 0;
+    changed |= api->ui_choice(zh ? "标记位置" : "Tag position", &g_set.side, zh ? kSidesZh : kSidesEn, 2,
+                              zh ? "选择标记显示的位置：紧靠任务行左侧边缘，或放在任务名称框右侧内部。"
+                                 : "Where the mark sits: just left of the quest's row (on the list's edge), or inside the name's box at its right end.") != 0;
     if (changed) save_settings();
 }
 

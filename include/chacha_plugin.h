@@ -161,6 +161,8 @@ typedef struct ChaChaApi {
     /* Cha-Cha 0.2.2+: sizeof(ChaChaPlugin) of the host. A plugin sets ChaChaPlugin members past `host` (on_save,
      * on_defaults) only when the host has them: chacha_has_save_hooks(api). */
     uint32_t plugin_size;
+    /* Current UI language ("zh-CN" or "en") */
+    const char* (*language)(void);
 } ChaChaApi;
 
 struct ChaChaPlugin {
@@ -185,6 +187,13 @@ typedef int (*ChaChaPluginInit)(const ChaChaApi* api, ChaChaPlugin* self);
 static inline int chacha_has_save_hooks(const ChaChaApi* api) {
     return api->size >= offsetof(ChaChaApi, plugin_size) + sizeof(uint32_t) &&
            api->plugin_size >= offsetof(ChaChaPlugin, on_defaults) + sizeof(void*);
+}
+
+/* 1 when the Cha-Cha UI is currently set to Simplified Chinese */
+static inline int chacha_is_zh(const ChaChaApi* api) {
+    if (!api || api->size < offsetof(ChaChaApi, language) + sizeof(void*) || !api->language) return 0;
+    const char* lang = api->language();
+    return lang && lang[0] == 'z' && lang[1] == 'h';
 }
 
 #ifdef __cplusplus

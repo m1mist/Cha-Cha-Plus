@@ -86,6 +86,7 @@ bool g_fonts_pending = false;
 std::function<void(const std::string&)> g_toast;
 uint8_t* g_base = nullptr;
 std::string g_data_utf8, g_sha1;
+std::string g_language = "zh-CN";
 const auto g_t0 = std::chrono::steady_clock::now();
 
 // the HUD's draw list while on_hud runs, the settings rows while on_settings runs
@@ -425,6 +426,7 @@ const char* mod_dir(ChaChaPlugin* self) {
     Host* h = host_of(self);
     return h ? h->dir.c_str() : "";
 }
+const char* api_language() { return g_language.c_str(); }
 
 ChaChaApi g_api{};
 
@@ -496,9 +498,11 @@ std::vector<Mod> scan(const stdfs::path& data) {
             return it == info.end() || it->second.empty() ? d : it->second;
         };
         m.name = get("name", m.folder);
+        m.name_zh = get("name.zh-CN", "");
         m.author = get("author", "");
         m.version = get("version", "");
         m.description = get("description", "");
+        m.description_zh = get("description.zh-CN", "");
         const auto st = states.find("mod." + m.folder);
         // never switched in MODS: the mod's own default (mod.ini "default = off" for optional mods), else on
         m.enabled = st == states.end() ? get("default", "on") != "off" : st->second != "off";
@@ -542,6 +546,8 @@ void set_enabled(size_t i, bool on) {
 }
 
 void set_toast(std::function<void(const std::string&)> fn) { g_toast = std::move(fn); }
+void set_language(const std::string& lang) { g_language = (lang == "en") ? "en" : "zh-CN"; }
+const std::string& language() { return g_language; }
 
 void load(const stdfs::path& data, uint8_t* guest_base, const std::string& rpx_sha1) {
     g_data = data;
@@ -585,6 +591,7 @@ void load(const stdfs::path& data, uint8_t* guest_base, const std::string& rpx_s
     g_api.config_save = &config_save;
     g_api.mod_dir = &mod_dir;
     g_api.plugin_size = sizeof(ChaChaPlugin);
+    g_api.language = &api_language;
 
     size_t loaded = 0;
     for (size_t i = 0; i < g_mods.size(); ++i) {

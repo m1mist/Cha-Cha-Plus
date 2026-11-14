@@ -105,11 +105,13 @@ void on_defaults(ChaChaPlugin*) {
 }
 
 void on_settings(ChaChaPlugin*) {
-    api->ui_group("Settings");
-    if (api->ui_switch("Any talisman from any table", &g_enabled,
-                       "Each talisman is rolled as if from a random one of the 17 charm tables, with the game's own odds, "
-                       "so cursed tables no longer lock talismans out. Your save keeps its own table: switched off, the "
-                       "game rolls exactly as it would have.") != 0)
+    const bool zh = chacha_is_zh(api);
+    api->ui_group(zh ? "设置" : "Settings");
+    if (api->ui_switch(zh ? "从全部护石表随机抽取护石" : "Any talisman from any table", &g_enabled,
+                       zh ? "每次获得护石时，按游戏原概率从 17 张护石表中随机一张进行抽取，避免因“诅咒护石表”导致无法出货。存档原有护石表保持不变；关闭后将恢复游戏原本的抽取方式。"
+                          : "Each talisman is rolled as if from a random one of the 17 charm tables, with the game's own odds, "
+                            "so cursed tables no longer lock talismans out. Your save keeps its own table: switched off, the "
+                            "game rolls exactly as it would have.") != 0)
         save_settings();
 }
 

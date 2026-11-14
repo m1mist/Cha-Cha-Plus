@@ -1064,10 +1064,41 @@ std::string join(const std::vector<std::string>& v) {
     return out;
 }
 
+std::atomic<bool> g_zh{true};
+
 }  // namespace
 
+void set_language(const std::string& lang) { g_zh = (lang != "en"); }
+
 const std::vector<BindingRow>& binding_rows() {
-    static const std::vector<BindingRow> rows = {
+    static const std::vector<BindingRow> rows_zh = {
+        {"a", "A", true},
+        {"b", "B", true},
+        {"x", "X", true},
+        {"y", "Y", true},
+        {"a+x", "X + A 组合键", true},
+        {"l", "L", true},
+        {"r", "R", true},
+        {"zl", "ZL", true},
+        {"zr", "ZR", true},
+        {"plus", "+ (Start)", true},
+        {"minus", "- (Select)", true},
+        {"lstick", "左摇杆按下", true},
+        {"rstick", "右摇杆按下", true},
+        {"up", "十字键 上", true},
+        {"down", "十字键 下", true},
+        {"left", "十字键 左", true},
+        {"right", "十字键 右", true},
+        {"lstick_up", "移动 上", false},
+        {"lstick_down", "移动 下", false},
+        {"lstick_left", "移动 左", false},
+        {"lstick_right", "移动 右", false},
+        {"rstick_up", "视角 上", false},
+        {"rstick_down", "视角 下", false},
+        {"rstick_left", "视角 左", false},
+        {"rstick_right", "视角 右", false},
+    };
+    static const std::vector<BindingRow> rows_en = {
         {"a", "A", true},
         {"b", "B", true},
         {"x", "X", true},
@@ -1094,7 +1125,7 @@ const std::vector<BindingRow>& binding_rows() {
         {"rstick_left", "Camera left", false},
         {"rstick_right", "Camera right", false},
     };
-    return rows;
+    return g_zh ? rows_zh : rows_en;
 }
 
 std::string key_names(const std::string& target) {

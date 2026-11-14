@@ -28,13 +28,15 @@ struct PluginState {
 struct Mod {
     std::string folder;  // name of its folder in mods/
     std::filesystem::path dir;
-    std::string name, author, version, description;
+    std::string name, name_zh, author, version, description, description_zh;
     bool enabled = true;      // as saved in mods.ini (applies on the next start)
     bool active = false;      // loaded in this session
     bool has_content = false; // content/ exists
     size_t content_files = 0;
     std::vector<std::filesystem::path> plugin_files;
     std::vector<PluginState> plugins;  // this session's, when active
+    const std::string& display_name(bool zh) const { return zh && !name_zh.empty() ? name_zh : name; }
+    const std::string& display_description(bool zh) const { return zh && !description_zh.empty() ? description_zh : description; }
 };
 
 std::filesystem::path mods_dir(const std::filesystem::path& data);
@@ -53,6 +55,9 @@ std::vector<Mod>& mods();
 // The launcher before the game boots: the mods folder read once, for the MODS tab.
 void ensure_scanned(const std::filesystem::path& data);
 void set_enabled(size_t mod, bool on);
+// Current UI language ("zh-CN" or "en") exposed to plugins.
+void set_language(const std::string& lang);
+const std::string& language();
 // Plugin calls go through these; the launcher hands its toast here.
 void set_toast(std::function<void(const std::string&)> fn);
 

@@ -54,6 +54,7 @@ struct BindingRow {
 };
 const std::vector<BindingRow>& binding_rows();
 // What is bound to a target, for display ("W, Up"; "" when nothing): keys / mouse, and controller buttons.
+void set_language(const std::string& lang);
 std::string key_names(const std::string& target);
 std::string pad_names(const std::string& target);
 // Binds the key / mouse button / wheel (pad false) or controller button / trigger (pad true) pressed in this

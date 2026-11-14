@@ -163,17 +163,68 @@ stdfs::path hud_font() {
 #endif
 }
 
+// A CJK fallback font merged into the UI fonts for localized menus and quests.
+stdfs::path cjk_font() {
+#ifdef _WIN32
+    for (const char* f : {"msyh.ttc", "msyh.ttf", "simhei.ttf", "simsun.ttc", "Deng.ttf"})
+        if (const stdfs::path p = windows_font(f); !p.empty()) return p;
+    return {};
+#else
+    std::error_code ec;
+    for (const char* f : {"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+                          "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+                          "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"})
+        if (stdfs::exists(f, ec)) return f;
+    return {};
+#endif
+}
+
 struct Fonts {
     ImFont *body = nullptr, *menu = nullptr, *note = nullptr;
 };
 
-// System fonts only (nothing bundled): Bahnschrift.
+// System fonts only (nothing bundled): Bahnschrift + CJK merge.
 Fonts load_fonts(float scale) {
     ImGuiIO& io = ImGui::GetIO();
+    static ImVector<ImWchar> cjk_ranges;
+    if (cjk_ranges.empty()) {
+        ImFontGlyphRangesBuilder builder;
+        builder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+        static const ImWchar kExtraRanges[] = {
+            0x00B7, 0x00B7,  // ·
+            0x00D7, 0x00D7,  // ×
+            0x2010, 0x203F,  // – — ‘ ’ “ ” …
+            0x2190, 0x21FF,  // arrows
+            0x2260, 0x226F,  // ≠ ≤ ≥
+            0x3000, 0x30FF,  // CJK punctuation + kana
+            0xFF00, 0xFFEF,  // fullwidth punctuation & ASCII
+            0,
+        };
+        builder.AddRanges(kExtraRanges);
+        builder.AddText("狩猎坦齐亚莫加剥取泛光锐利护石槽位帧率暗角微调重映射勾选重启键鼠摇杆鼠标副屏画中画咒咪崛拟拽晰渲诅轴");
+        builder.BuildRanges(&cjk_ranges);
+    }
+    const stdfs::path cjk = cjk_font();
+    const std::string cjk_str = cjk.empty() ? std::string() : cjk.string();
     Fonts f;
     const auto add = [&](const char* file, float px) -> ImFont* {
         const stdfs::path p = windows_font(file);
         ImFont* font = p.empty() ? nullptr : io.Fonts->AddFontFromFileTTF(p.string().c_str(), px * scale);
+        if (!font && !cjk_str.empty()) {
+            ImFontConfig cfg;
+            cfg.OversampleH = 1;
+            cfg.OversampleV = 1;
+            cfg.PixelSnapH = true;
+            return io.Fonts->AddFontFromFileTTF(cjk_str.c_str(), px * scale, &cfg, cjk_ranges.Data);
+        }
+        if (font && !cjk_str.empty()) {
+            ImFontConfig merge;
+            merge.MergeMode = true;
+            merge.PixelSnapH = true;
+            merge.OversampleH = 1;
+            merge.OversampleV = 1;
+            io.Fonts->AddFontFromFileTTF(cjk_str.c_str(), px * scale, &merge, cjk_ranges.Data);
+        }
         if (!font) {
             ImFontConfig cfg;
             cfg.SizePixels = px * scale;
@@ -276,9 +327,11 @@ void headless_shaders(ShaderJob& job, const fs::GameImage& game, const stdfs::pa
 
 // internal resolution: a multiple of the game's native 1280x720
 const std::vector<float> kScales = {0.5f, 0.75f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f};
-const std::vector<std::string> kScaleNames = {"0.5x", "0.75x", "1x (native)", "1.5x", "2x", "3x", "4x"};
+const std::vector<std::string> kScaleNamesZh = {"0.5x", "0.75x", "1x (原生)", "1.5x", "2x", "3x", "4x"};
+const std::vector<std::string> kScaleNamesEn = {"0.5x", "0.75x", "1x (native)", "1.5x", "2x", "3x", "4x"};
 const std::vector<std::string> kDisplayModes = {"windowed", "borderless", "fullscreen"};
-const std::vector<std::string> kDisplayNames = {"Windowed", "Borderless", "Fullscreen"};
+const std::vector<std::string> kDisplayNamesZh = {"窗口", "无边框全屏", "独占全屏"};
+const std::vector<std::string> kDisplayNamesEn = {"Windowed", "Borderless", "Fullscreen"};
 
 // A frame's draw lists, copied (the overlay is recorded on whichever thread presents, while the host main thread
 // builds the next frame).
@@ -678,9 +731,17 @@ struct Launcher::Impl {
         if (out.empty()) out.push_back("1280x720");
         return out;
     }
+    bool is_zh() const { return settings.language != "en"; }
+    const char* tr(const char* zh, const char* en) const { return is_zh() ? zh : en; }
+    void sync_language() {
+        input::set_language(settings.language);
+        plugins::set_language(settings.language);
+        game::net_set_language(settings.language);
+    }
     void apply() {
         g_sound.play(Sfx::Apply);
         settings = draft;
+        sync_language();
         save_settings(paths, settings);
         apply_live();
         game::set_monster_hp_scaling(settings.monster_hp_scaling);
@@ -801,6 +862,7 @@ Launcher::Launcher(const AppPaths& paths, gfx::Presenter& presenter, std::vector
     d.game = std::move(game);
     d.error = d.sources.empty() ? std::string() : std::move(error);  // first start: nothing chosen yet is not an error
     d.settings = settings;
+    d.sync_language();
     d.show_menu = show_menu;
     d.shader_dir = paths.cache() / "shaders";
     for (size_t i = 0; i < kScales.size(); ++i)
@@ -1021,7 +1083,8 @@ bool Launcher::frame(const LaunchState& st) {
     if (d.dumping)
         if (const uint64_t n = gfx::texture_dumps(); n != d.dumps_shown) {
             d.dumps_shown = n;
-            d.toast("Dumped " + std::to_string(n - d.dump_base) + " textures to " + d.dump_folder());
+            d.toast(d.is_zh() ? "已导出 " + std::to_string(n - d.dump_base) + " 张材质到 " + d.dump_folder()
+                              : "Dumped " + std::to_string(n - d.dump_base) + " textures to " + d.dump_folder());
         }
     if (d.mode == Impl::Mode::Hidden && !d.keyboard && !d.toasting() && !d.hud()) {
         if (d.toast_drawn) {  // the last toast faded: nothing of the overlay stays on screen
@@ -1068,8 +1131,11 @@ bool Launcher::Impl::draw(const LaunchState& st) {
     if (translating && job.finished) {
         translating = false;
         if (!job.ok())
-            error = std::to_string(job.result.shaders - job.result.compiled) + " of " + std::to_string(job.result.shaders) +
-                    " shaders could not be prepared; some effects may be missing.";
+            error = is_zh()
+                        ? "共 " + std::to_string(job.result.shaders) + " 个着色器中有 " +
+                              std::to_string(job.result.shaders - job.result.compiled) + " 个未能准备完成，部分画面效果可能缺失。"
+                        : std::to_string(job.result.shaders - job.result.compiled) + " of " + std::to_string(job.result.shaders) +
+                              " shaders could not be prepared; some effects may be missing.";
         std::printf("shaders: %d/%d ready in %.1f s\n", job.result.compiled, job.result.shaders, job.seconds());
     }
     bool quit = false, play = false;
@@ -1170,15 +1236,16 @@ void Launcher::Impl::draw_title(const LaunchState& st, ImVec2 size, bool& play, 
     }
     refocus = false;
     if (game) {
-        if (menu_item("PLAY", fonts.menu, menu_w, st.game_running && st.pipelines_ready)) play = true;
-    } else if (menu_item("CHOOSE GAME", fonts.menu, menu_w, !dialog.pending)) {
-        static const SDL_DialogFileFilter filters[] = {{"Wii U archive (*.wua)", "wua"}, {"All files", "*"}};
+        if (menu_item(tr("开始游戏", "PLAY"), fonts.menu, menu_w, st.game_running && st.pipelines_ready)) play = true;
+    } else if (menu_item(tr("选择游戏", "CHOOSE GAME"), fonts.menu, menu_w, !dialog.pending)) {
+        static const SDL_DialogFileFilter filters_zh[] = {{"Wii U 归档 (*.wua)", "wua"}, {"所有文件", "*"}};
+        static const SDL_DialogFileFilter filters_en[] = {{"Wii U archive (*.wua)", "wua"}, {"All files", "*"}};
         dialog.pending = true;
-        SDL_ShowOpenFileDialog(&DialogResult::callback, &dialog, window, filters, 2, nullptr, false);
+        SDL_ShowOpenFileDialog(&DialogResult::callback, &dialog, window, is_zh() ? filters_zh : filters_en, 2, nullptr, false);
     }
-    if (menu_item("SETTINGS", fonts.menu, menu_w)) show_page(last_settings_page);
-    if (menu_item("MODS", fonts.menu, menu_w)) show_page(last_mods_page);
-    if (menu_item("QUIT", fonts.menu, menu_w)) quit = true;
+    if (menu_item(tr("游戏设置", "SETTINGS"), fonts.menu, menu_w)) show_page(last_settings_page);
+    if (menu_item(tr("模组与任务", "MODS"), fonts.menu, menu_w)) show_page(last_mods_page);
+    if (menu_item(tr("退出", "QUIT"), fonts.menu, menu_w)) quit = true;
 }
 
 // Status bottom-left (the game, or what is missing), toasts (shader translation, pipeline prebuild), version
@@ -1188,7 +1255,9 @@ void Launcher::Impl::draw_status(const LaunchState& st, ImVec2 size) {
     const float left = lay.left, bottom = size.y - 22 * scale;
     const float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - t0).count();
     if (mode == Mode::Title) {
-        const char* status = game ? "Game ready." : dialog.pending ? "Choose your game..." : "No game chosen.";
+        const char* status = game ? tr("游戏已就绪。", "Game ready.")
+                           : dialog.pending ? tr("请选择游戏文件...", "Choose your game...")
+                                            : tr("尚未选择游戏。", "No game chosen.");
         const ImU32 status_col = game ? IM_COL32(170, 230, 140, 255) : IM_COL32(255, 160, 120, 255);
         dl->AddText(fonts.body, fonts.body->FontSize, ImVec2(left + 4, lay.status_y), status_col, status);
         if (game) {  // check mark, drawn (the UI font has no such glyph)
@@ -1196,8 +1265,10 @@ void Launcher::Impl::draw_status(const LaunchState& st, ImVec2 size) {
             const ImVec2 pts[3] = {ImVec2(x, y), ImVec2(x + 5 * scale, y + 5 * scale), ImVec2(x + 13 * scale, y - 6 * scale)};
             dl->AddPolyline(pts, 3, status_col, 0, 2.0f * scale);
         }
-        const std::string detail = game ? "Wii U  \xC2\xB7  USA  \xC2\xB7  update v" + std::to_string(game->update.version)
-                                        : error.empty() ? "A .wua file or the game + update folders (code, content, meta)" : error;
+        const std::string detail = game ? tr("Wii U  \xC2\xB7  日版  \xC2\xB7  更新 v", "Wii U  \xC2\xB7  JPN  \xC2\xB7  update v") + std::to_string(game->update.version)
+                                        : error.empty() ? tr("请选择 .wua 文件，或解包后的游戏与更新目录（含 code、content、meta）",
+                                                             "A .wua file or the game + update folders (code, content, meta)")
+                                                        : error;
         dl->AddText(fonts.note, fonts.note->FontSize, ImVec2(left + 4, lay.detail_y), IM_COL32(200, 190, 175, 220), detail.c_str(),
                     nullptr, size.x * 0.5f);
     }
@@ -1206,11 +1277,11 @@ void Launcher::Impl::draw_status(const LaunchState& st, ImVec2 size) {
     if (translating) {
         done = job.progress.done;
         total = job.progress.total;
-        what = total ? "Compiling %d shaders" : "Reading the game files";
+        what = total ? tr("正在编译 %d 个着色器", "Compiling %d shaders") : tr("正在读取游戏文件", "Reading the game files");
     } else if (game && !st.pipelines_ready) {
         done = static_cast<int>(st.pipelines_done);
         total = static_cast<int>(st.pipelines_total);
-        what = total ? "Compiling %d pipelines" : "Starting the game";
+        what = total ? tr("正在编译 %d 条渲染管线", "Compiling %d pipelines") : tr("正在启动游戏", "Starting the game");
     }
     if (what) {
         const float ty = lay.toast_y;  // above the status lines
@@ -1282,11 +1353,17 @@ void Launcher::Impl::draw_panel(ImVec2 size) {
         const char* section;  // starts a section of the sidebar
         const char* title;    // in the title band
     };
-    static constexpr PageInfo kPages[] = {
+    static constexpr PageInfo kPagesZh[] = {
+        {"显示", "设置", "显示设置"},  {"画面", nullptr, "画面效果"}, {"控制", nullptr, "按键与控制"},
+        {"玩法", nullptr, "玩法与联机"}, {"模组", "扩展内容", "模组管理"}, {"任务", nullptr, "DLC 与任务"},
+        {"系统", "Cha-Cha", "系统与文件"},
+    };
+    static constexpr PageInfo kPagesEn[] = {
         {"Display", "Settings", "Display"},  {"Graphics", nullptr, "Graphics"}, {"Controls", nullptr, "Controls"},
         {"Gameplay", nullptr, "Gameplay"},   {"Mods", "Content", "Mods"},       {"Quests", nullptr, "Quests"},
         {"System", "Cha-Cha", "System"},
     };
+    const PageInfo* const kPages = is_zh() ? kPagesZh : kPagesEn;
     const bool mods = is_mods_page(page);
     if (mods && quests_stale) refresh_quests();  // also applies the pack modes
     const int npages = static_cast<int>(Page::Count), current = static_cast<int>(page);
@@ -1366,7 +1443,7 @@ void Launcher::Impl::draw_panel(ImVec2 size) {
         float hx = sx + 18 * s;
         hx += key_cap(dl, ImVec2(hx, hy), pad_keys ? lp : "Q", true) + 6 * s;
         hx += key_cap(dl, ImVec2(hx, hy), pad_keys ? rp : "E", true) + 10 * s;
-        dl->AddText(fonts.note, fonts.note->FontSize, ImVec2(hx, hy - fonts.note->FontSize * 0.5f), kDim, "Page");
+        dl->AddText(fonts.note, fonts.note->FontSize, ImVec2(hx, hy - fonts.note->FontSize * 0.5f), kDim, tr("切换分页", "Page"));
     }
     if (!capturing) {  // LB / RB, Q / E
         int step = 0;
@@ -1450,7 +1527,8 @@ void Launcher::Impl::draw_panel(ImVec2 size) {
         }
         if (!mods && booted && (settings.render_scale != boot_settings.render_scale || settings.fps_limit != boot_settings.fps_limit ||
                        settings.vsync != boot_settings.vsync || (!sources.empty() && sources != boot_sources))) {
-            const char* note = "Internal resolution, frame rate, VSync and game changes apply on the next start.";
+            const char* note = tr("内部分辨率、帧率上限、垂直同步及游戏路径更改将在下次启动时生效。",
+                                  "Internal resolution, frame rate, VSync and game changes apply on the next start.");
             const float nh = fonts.note->CalcTextSizeA(fonts.note->FontSize, FLT_MAX, wrap - 40 * s, note).y + 24 * s;
             const ImVec2 n0(dx, bottom_y - nh), n1(dx + wrap, bottom_y);
             dl->AddRectFilled(n0, n1, sk ? IM_COL32(110, 36, 26, 36) : IM_COL32(236, 178, 84, 26), sk ? 0.0f : 10 * s);
@@ -1470,7 +1548,8 @@ void Launcher::Impl::draw_panel(ImVec2 size) {
     if (p.apply && !(draft == settings)) apply();  // A / Enter on a Value row
     const bool dirty = !(draft == settings);
     const float bh = 40 * s;
-    const ImVec2 ls = fonts.body->CalcTextSizeA(fonts.body->FontSize, FLT_MAX, 0, "Apply");
+    const char* apply_label = tr("应用", "Apply");
+    const ImVec2 ls = fonts.body->CalcTextSizeA(fonts.body->FontSize, FLT_MAX, 0, apply_label);
     const float bw = ls.x + (sk ? 72 : 48) * s;
     const ImVec2 b0(b.x - pad - bw, fy + (footer_h - bh) * 0.5f), b1(b0.x + bw, b0.y + bh);
     ImGui::SetCursorScreenPos(b0);
@@ -1481,13 +1560,13 @@ void Launcher::Impl::draw_panel(ImVec2 size) {
     if (sk) {  // the woven bar with a gold rim; faint while there is nothing to apply
         sk->bar(dl, skin::kBarWeave, b0, b1, 6, 6, dirty ? IM_COL32_WHITE : IM_COL32(255, 255, 255, 70));
         dl->AddRect(b0, b1, dirty ? (sel ? kText : kGold) : kGoldDim, 0, 0, sel ? 2.0f * s : 1.0f * s);
-        dl->AddText(fonts.body, fonts.body->FontSize, ImVec2(b0.x + (bw - ls.x) * 0.5f, b0.y + (bh - ls.y) * 0.5f), dirty ? kText : kOff, "Apply");
+        dl->AddText(fonts.body, fonts.body->FontSize, ImVec2(b0.x + (bw - ls.x) * 0.5f, b0.y + (bh - ls.y) * 0.5f), dirty ? kText : kOff, apply_label);
     } else {
         dl->AddRectFilled(b0, b1, dirty ? (sel ? IM_COL32(246, 192, 104, 255) : kAmber) : kFill, bh * 0.5f);
-        dl->AddText(fonts.body, fonts.body->FontSize, ImVec2(b0.x + (bw - ls.x) * 0.5f, b0.y + (bh - ls.y) * 0.5f), dirty ? kOnAmber : kOff, "Apply");
+        dl->AddText(fonts.body, fonts.body->FontSize, ImVec2(b0.x + (bw - ls.x) * 0.5f, b0.y + (bh - ls.y) * 0.5f), dirty ? kOnAmber : kOff, apply_label);
     }
     if (dirty) {
-        const char* note = "Unapplied changes";
+        const char* note = tr("有未应用的更改", "Unapplied changes");
         const ImVec2 ns = fonts.note->CalcTextSizeA(fonts.note->FontSize, FLT_MAX, 0, note);
         dl->AddText(fonts.note, fonts.note->FontSize, ImVec2(b0.x - 16 * s - ns.x, fy + (footer_h - ns.y) * 0.5f), sk ? kGold : kAmber, note);
     }
@@ -1508,13 +1587,16 @@ float Launcher::Impl::draw_guide(ImDrawList* dl, ImVec2 at, float, bool changes,
     };
     std::vector<Item> items;
     if (capturing) {
-        items = {{"Esc", "Cancel"}, {"Delete", "Clear"}};
+        items = {{"Esc", tr("取消", "Cancel")}, {"Delete", tr("清除", "Clear")}};
     } else {
         // on a Value row with unapplied changes, A / Enter applies (left / right change the value)
-        items.push_back({pad ? sel : "Enter", confirm_applies ? "Apply" : page == Page::Controls ? "Rebind" : "Select"});
-        if (changes) items.push_back({"<>", "Change"});
-        if (settings_tab && !confirm_applies) items.push_back({pad ? (apply_key.empty() ? "+" : apply_key) : "Ctrl+Enter", "Apply"});
-        items.push_back({pad ? back : "Esc", "Close"});
+        items.push_back({pad ? sel : "Enter",
+                         confirm_applies ? tr("应用", "Apply")
+                         : page == Page::Controls ? tr("改键", "Rebind")
+                                                  : tr("选择", "Select")});
+        if (changes) items.push_back({"<>", tr("调整", "Change")});
+        if (settings_tab && !confirm_applies) items.push_back({pad ? (apply_key.empty() ? "+" : apply_key) : "Ctrl+Enter", tr("应用", "Apply")});
+        items.push_back({pad ? back : "Esc", tr("关闭", "Close")});
     }
     float x = at.x;
     for (const Item& it : items) {
@@ -1574,162 +1656,210 @@ float Launcher::Impl::key_cap(ImDrawList* dl, ImVec2 at, const std::string& key,
 // Display: how the picture reaches the screen (window, scaling) and how fast it is drawn. Window size and internal
 // resolution are independent: the game renders at its internal resolution and the picture is scaled to the window.
 void Launcher::Impl::draw_page_display(PanelLayout& p) {
-    group_begin(p, "Screen");
+    const auto& disp_names = is_zh() ? kDisplayNamesZh : kDisplayNamesEn;
+    const auto& scale_names = is_zh() ? kScaleNamesZh : kScaleNamesEn;
+    group_begin(p, tr("屏幕与画面", "Screen"));
     int mode_i = static_cast<int>(std::find(kDisplayModes.begin(), kDisplayModes.end(), draft.display_mode) - kDisplayModes.begin()) % 3;
-    if (cycle(value_row(p, "Display mode", kDisplayNames[static_cast<size_t>(mode_i)],
-                        "Windowed, borderless (fills the screen at desktop resolution) or exclusive fullscreen (on Wayland "
-                        "the same as borderless)."),
+    if (cycle(value_row(p, tr("显示模式", "Display mode"), disp_names[static_cast<size_t>(mode_i)],
+                        tr("窗口、无边框全屏（按桌面分辨率铺满屏幕）或独占全屏（在 Wayland 下与无边框相同）。",
+                           "Windowed, borderless (fills the screen at desktop resolution) or exclusive fullscreen (on Wayland the same as borderless).")),
               mode_i, 3))
         draft.display_mode = kDisplayModes[static_cast<size_t>(mode_i)];
     const std::vector<std::string> sizes = window_sizes();
     int size_i = static_cast<int>(std::find(sizes.begin(), sizes.end(), draft.window_size) - sizes.begin());
     if (size_i >= static_cast<int>(sizes.size())) size_i = 0;
-    if (cycle(value_row(p, "Window size", sizes[static_cast<size_t>(size_i)],
-                        "The size of the window in windowed mode (you can also drag its edges). It does not change the internal "
-                        "resolution: the picture is scaled to fit.",
+    if (cycle(value_row(p, tr("窗口尺寸", "Window size"), sizes[static_cast<size_t>(size_i)],
+                        tr("窗口模式下的窗口大小（也可直接拖拽窗口边缘调整）。它不会改变内部分辨率，画面会自动缩放适配。",
+                           "The size of the window in windowed mode (you can also drag its edges). It does not change the internal resolution: the picture is scaled to fit."),
                         draft.display_mode == "windowed"),
               size_i, static_cast<int>(sizes.size())))
         draft.window_size = sizes[static_cast<size_t>(size_i)];
     int sharp = draft.sharp_scaling ? 1 : 0;
-    if (cycle(value_row(p, "Scaling", sharp ? "Sharp" : "Smooth",
-                        "How the game's picture is fitted to the window or screen. Smooth blends neighbouring pixels (soft "
-                        "edges); Sharp keeps every pixel crisp, with no smoothing - best when the screen is a whole multiple of "
-                        "the internal resolution. The game itself has no anti-aliasing."),
+    if (cycle(value_row(p, tr("缩放方式", "Scaling"), sharp ? tr("锐利", "Sharp") : tr("平滑", "Smooth"),
+                        tr("画面适配窗口或屏幕时的缩放方式。“平滑”会混合相邻像素（边缘柔和）；“锐利”保留像素边界不做平滑，当屏幕分辨率是内部分辨率的整数倍时效果最佳。原版游戏本身无抗锯齿。",
+                           "How the game's picture is fitted to the window or screen. Smooth blends neighbouring pixels (soft edges); Sharp keeps every pixel crisp, with no smoothing - best when the screen is a whole multiple of the internal resolution. The game itself has no anti-aliasing.")),
               sharp, 2))
         draft.sharp_scaling = sharp != 0;
     static const std::vector<std::string> kAspects = {"16:9", "21:9", "32:9", "auto"};
-    static const std::vector<std::string> kAspectNames = {"16:9", "21:9", "32:9", "Auto (window)"};
+    static const std::vector<std::string> kAspectNamesZh = {"16:9", "21:9", "32:9", "自动（跟随窗口）"};
+    static const std::vector<std::string> kAspectNamesEn = {"16:9", "21:9", "32:9", "Auto (window)"};
+    const auto& aspect_names = is_zh() ? kAspectNamesZh : kAspectNamesEn;
     int aspect_i = static_cast<int>(std::find(kAspects.begin(), kAspects.end(), draft.aspect_ratio) - kAspects.begin());
     if (aspect_i >= static_cast<int>(kAspects.size())) aspect_i = 0;
-    if (cycle(value_row(p, "Aspect ratio", kAspectNames[static_cast<size_t>(aspect_i)],
-                        "The picture's shape. 16:9 is the game's own (bars at the sides on a wider screen). 21:9 and 32:9 "
-                        "show more of the world to the left and right on ultrawide screens, with the HUD kept 16:9 in the "
-                        "middle. Auto follows the window's shape."),
+    if (cycle(value_row(p, tr("画面比例", "Aspect ratio"), aspect_names[static_cast<size_t>(aspect_i)],
+                        tr("画面宽高比。16:9 为游戏原生比例（更宽屏幕左右留黑边）；21:9 与 32:9 可在带鱼屏上展示更宽的 3D 视野，HUD 保持在中间 16:9 区域；自动则跟随窗口比例。",
+                           "The picture's shape. 16:9 is the game's own (bars at the sides on a wider screen). 21:9 and 32:9 show more of the world to the left and right on ultrawide screens, with the HUD kept 16:9 in the middle. Auto follows the window's shape.")),
               aspect_i, static_cast<int>(kAspects.size())))
         draft.aspect_ratio = kAspects[static_cast<size_t>(aspect_i)];
     group_end(p);
 
-    group_begin(p, "Performance");
+    group_begin(p, tr("性能", "Performance"));
     int scale_i = 2;
     for (size_t i = 0; i < kScales.size(); ++i)
         if (std::abs(kScales[i] - draft.render_scale) < 0.01f) scale_i = static_cast<int>(i);
     const float s = kScales[static_cast<size_t>(scale_i)];
-    scale_desc = "The resolution the game renders at, independent of the window: " + std::to_string(static_cast<int>(1280 * s)) + "x" +
-                 std::to_string(static_cast<int>(720 * s)) + " (" + kScaleNames[static_cast<size_t>(scale_i)] +
-                 " the native 1280x720). Higher than your screen supersamples (sharper, slower); lower saves GPU time. "
-                 "Applies on the next start.";
-    if (cycle(value_row(p, "Internal resolution", kScaleNames[static_cast<size_t>(scale_i)], scale_desc.c_str()), scale_i,
+    scale_desc = is_zh()
+                     ? "游戏实际渲染分辨率，独立于窗口大小：" + std::to_string(static_cast<int>(1280 * s)) + "x" +
+                           std::to_string(static_cast<int>(720 * s)) + "（原生 1280x720 的 " + scale_names[static_cast<size_t>(scale_i)] +
+                           "）。高于屏幕分辨率会进行超采样（更清晰但更吃性能），降低可节省显卡开销。将在下次启动时生效。"
+                     : "The resolution the game renders at, independent of the window: " + std::to_string(static_cast<int>(1280 * s)) + "x" +
+                           std::to_string(static_cast<int>(720 * s)) + " (" + scale_names[static_cast<size_t>(scale_i)] +
+                           " the native 1280x720). Higher than your screen supersamples (sharper, slower); lower saves GPU time. Applies on the next start.";
+    if (cycle(value_row(p, tr("内部分辨率", "Internal resolution"), scale_names[static_cast<size_t>(scale_i)], scale_desc.c_str()), scale_i,
               static_cast<int>(kScales.size())))
         draft.render_scale = kScales[static_cast<size_t>(scale_i)];
     static const std::vector<int> kFps = {0, 30, 60, 120, 144, 240, -1};
-    static const std::vector<std::string> kFpsNames = {"Display refresh", "30", "60", "120", "144", "240", "Unlimited"};
+    static const std::vector<std::string> kFpsNamesZh = {"跟随显示器刷新率", "30", "60", "120", "144", "240", "不限"};
+    static const std::vector<std::string> kFpsNamesEn = {"Display refresh", "30", "60", "120", "144", "240", "Unlimited"};
+    const auto& fps_names = is_zh() ? kFpsNamesZh : kFpsNamesEn;
     int fps = static_cast<int>(std::find(kFps.begin(), kFps.end(), draft.fps_limit) - kFps.begin());
     if (fps >= static_cast<int>(kFps.size())) fps = 0;
-    if (cycle(value_row(p, "Frame rate limit", kFpsNames[static_cast<size_t>(fps)],
-                        "The most frames per second the game draws. Applies on the next start."),
+    if (cycle(value_row(p, tr("帧率上限", "Frame rate limit"), fps_names[static_cast<size_t>(fps)],
+                        tr("游戏每秒绘制的最高帧数。将在下次启动时生效。", "The most frames per second the game draws. Applies on the next start.")),
               fps, static_cast<int>(kFps.size())))
         draft.fps_limit = kFps[static_cast<size_t>(fps)];
-    switch_row(p, "VSync", draft.vsync, "Waits for the display's refresh: no tearing, a little more latency. Applies on the next start.");
+    switch_row(p, tr("垂直同步 (VSync)", "VSync"), draft.vsync,
+               tr("等待显示器刷新：可消除画面撕裂，但会略微增加输入延迟。将在下次启动时生效。",
+                  "Waits for the display's refresh: no tearing, a little more latency. Applies on the next start."));
     group_end(p);
 }
 
 // Graphics: what the world looks like - the overall look, the effects (the game's and Cha-Cha's), texture packs.
 void Launcher::Impl::draw_page_graphics(PanelLayout& p) {
-    group_begin(p, "Look");
+    group_begin(p, tr("画面风格", "Look"));
     int look = draft.look == "tri" ? 1 : 0;
-    if (cycle(value_row(p, "Look", look ? "Tri (Wii)" : "Original",
-                        "Original is MH3U as released. Tri gives the world the look of Monster Hunter Tri on the Wii: softer, "
-                        "muted colour, milky shadows, a gentle glow and haze in the distance. Menus and the HUD stay as they are."),
+    if (cycle(value_row(p, tr("色调风格", "Look"), look ? "Tri (Wii)" : tr("原版", "Original"),
+                        tr("“原版”保持 3G HD 原本色彩。“Tri (Wii)”让游戏世界呈现 Wii 版《怪物猎人 3》的风格：更柔和的色彩、乳白阴影、柔光与远处薄雾效果。菜单与 HUD 保持不变。",
+                           "Original is MH3U as released. Tri gives the world the look of Monster Hunter Tri on the Wii: softer, muted colour, milky shadows, a gentle glow and haze in the distance. Menus and the HUD stay as they are.")),
               look, 2))
         draft.look = look ? "tri" : "original";
     group_end(p);
 
-    group_begin(p, "The game's effects");
-    switch_row(p, "Bloom", draft.bloom, "The game's glow around bright light.");
+    group_begin(p, tr("游戏自带特效", "The game's effects"));
+    switch_row(p, tr("泛光 (Bloom)", "Bloom"), draft.bloom, tr("强光周围的辉光效果。", "The game's glow around bright light."));
     int dof = draft.depth_of_field == "enhanced" ? 2 : draft.depth_of_field == "off" ? 1 : 0;
-    static const std::vector<std::string> kDof = {"Original", "Off", "Enhanced"};
-    if (cycle(value_row(p, "Depth of field", kDof[static_cast<size_t>(dof)],
-                        "Original: the game's own (cutscenes). Enhanced also softens the distance during play, focused on your hunter."),
+    static const std::vector<std::string> kDofZh = {"原版", "关闭", "增强"};
+    static const std::vector<std::string> kDofEn = {"Original", "Off", "Enhanced"};
+    const auto& dof_names = is_zh() ? kDofZh : kDofEn;
+    if (cycle(value_row(p, tr("景深 (DOF)", "Depth of field"), dof_names[static_cast<size_t>(dof)],
+                        tr("“原版”仅在过场动画启用；“增强”会在实际游玩时也对远景应用以猎人为焦点的景深虚化。",
+                           "Original: the game's own (cutscenes). Enhanced also softens the distance during play, focused on your hunter.")),
               dof, 3))
         draft.depth_of_field = dof == 2 ? "enhanced" : dof == 1 ? "off" : "original";
     group_end(p);
 
-    group_begin(p, "Added by Cha-Cha");
-    switch_row(p, "Ambient occlusion", draft.ambient_occlusion, "Soft contact shadows where surfaces meet. Not in the original game.");
-    switch_row(p, "Global illumination", draft.global_illumination,
-               "Light bounces between surfaces: sunlit ground and walls tint what is next to them. Not in the original game.");
-    switch_row(p, "Vignette", draft.vignette, "Gently darker screen corners, drawing the eye to the middle. Not in the original game.");
+    group_begin(p, tr("Cha-Cha 增强特效", "Added by Cha-Cha"));
+    switch_row(p, tr("环境光遮蔽 (AO)", "Ambient occlusion"), draft.ambient_occlusion,
+               tr("在物体表面交界处添加柔和接触阴影（原版游戏无此效果）。", "Soft contact shadows where surfaces meet. Not in the original game."));
+    switch_row(p, tr("全局光照 (GI)", "Global illumination"), draft.global_illumination,
+               tr("模拟光线在表面间反弹：阳光照射的地面和墙壁会映染周围物体（原版游戏无此效果）。",
+                  "Light bounces between surfaces: sunlit ground and walls tint what is next to them. Not in the original game."));
+    switch_row(p, tr("暗角 (Vignette)", "Vignette"), draft.vignette,
+               tr("轻微压暗屏幕四角，突出中心视野（原版游戏无此效果）。", "Gently darker screen corners, drawing the eye to the middle. Not in the original game."));
     group_end(p);
 
-    group_begin(p, "Textures");
-    switch_row(p, "Texture packs", draft.texture_packs,
-               "Replacement textures from the texture_replacements folder (DDS files named after the game texture).");
+    group_begin(p, tr("材质贴图", "Textures"));
+    switch_row(p, tr("材质包", "Texture packs"), draft.texture_packs,
+               tr("从 texture_replacements 文件夹加载替换材质（按游戏贴图名命名的 DDS 文件）。",
+                  "Replacement textures from the texture_replacements folder (DDS files named after the game texture)."));
     // applies at once, without APPLY (a one-off action, not a saved setting)
-    if (switch_row(p, "Dump textures", dumping,
-                   "Saves every texture the game shows as a DDS file in the texture_dump folder, named so that a copy in "
-                   "texture_replacements replaces it - the way to make a texture pack. Starts at once; off again next start.")) {
+    if (switch_row(p, tr("导出材质", "Dump textures"), dumping,
+                   tr("把之后游戏显示的每张贴图按可替换文件名保存为 DDS 到 texture_dump 文件夹，用于制作材质包。立即开始，下次启动自动关闭。",
+                      "Saves every texture the game shows as a DDS file in the texture_dump folder, named so that a copy in texture_replacements replaces it - the way to make a texture pack. Starts at once; off again next start."))) {
         gfx::set_texture_dump(dumping);
         dump_base = dumps_shown = gfx::texture_dumps();
-        toast(dumping ? "Dumping textures to " + dump_folder() : "Texture dump off - " + std::to_string(dumps_shown) + " files so far in " + dump_folder());
+        toast(dumping ? tr("正在导出材质到 ", "Dumping textures to ") + dump_folder()
+                      : (is_zh() ? "已停止导出材质 - 当前共 " + std::to_string(dumps_shown) + " 个文件，位于 " + dump_folder()
+                                 : "Texture dump off - " + std::to_string(dumps_shown) + " files so far in " + dump_folder()));
     }
     group_end(p);
 }
 
 // Gameplay: changes to how the game plays, and what happens before the title screen.
 void Launcher::Impl::draw_page_gameplay(PanelLayout& p) {
-    group_begin(p, "Hunting");
-    switch_row(p, "Monster HP scaling", draft.monster_hp_scaling,
-               "Port Tanzia quests are made for four hunters. On: with fewer hunters monsters have less HP (1 hunter 65%, "
-               "2 80%, 3 90%, 4 100%), at every rank. Off: the game's own HP. Moga Village quests are never changed. "
-               "Takes effect for monsters that appear after the change.");
+    group_begin(p, tr("狩猎", "Hunting"));
+    switch_row(p, tr("怪物血量动态缩放", "Monster HP scaling"), draft.monster_hp_scaling,
+               tr("坦齐亚港任务默认按 4 人平衡。开启后人数不足 4 人时怪物血量会按比例降低（1 人 65%、2 人 80%、3 人 90%、4 人 100%），覆盖全等级任务。关闭则恢复原版血量；莫加村任务始终不变。对之后出现的新怪物生效。",
+                  "Port Tanzia quests are made for four hunters. On: with fewer hunters monsters have less HP (1 hunter 65%, 2 80%, 3 90%, 4 100%), at every rank. Off: the game's own HP. Moga Village quests are never changed. Takes effect for monsters that appear after the change."));
     group_end(p);
-    group_begin(p, "Online (experimental)");
-    info_row(p, "Status", game::net_status(), "Talk to Neko: Host a Hunt or Join a Hunt, in his Destination list. The host picks the quest and the others follow.");
-    switch_row(p, "Play over the network", draft.online_lan,
-               "Off: only copies on this PC can meet, and nothing leaves it. On: copies on your network can too. Other players' data then "
-               "reaches the game, so use it only on networks and with people you trust. Saves with Apply; used at the next Host or Join.");
-    if (button_row(p, "Leave session", "Leaves the session and goes back to Port Tanzia. Neko's Leave Online does the same.", game::net_can_request(game::NetRequest::Leave)))
+    group_begin(p, tr("联机（实验性）", "Online (experimental)"));
+    info_row(p, tr("联机状态", "Status"), game::net_status(),
+             tr("在坦齐亚港与猫船长对话，选择目的地中的“Host a Hunt（建房）”或“Join a Hunt（加入）”。房主接取任务后其余玩家跟随出发。",
+                "Talk to Neko: Host a Hunt or Join a Hunt, in his Destination list. The host picks the quest and the others follow."));
+    switch_row(p, tr("允许网络联机", "Play over the network"), draft.online_lan,
+               tr("关闭：仅限本机多开实例互通，无数据发出。开启：允许局域网内联机。其他玩家发来的数据会直接进入游戏，请仅在信任的网络与朋友间开启。点击“应用”后保存，下次建房或加入时生效。",
+                  "Off: only copies on this PC can meet, and nothing leaves it. On: copies on your network can too. Other players' data then reaches the game, so use it only on networks and with people you trust. Saves with Apply; used at the next Host or Join."));
+    if (button_row(p, tr("离开联机房间", "Leave session"),
+                   tr("退出当前联机房间并返回坦齐亚港，与猫船长菜单中的“Leave Online”作用相同。",
+                      "Leaves the session and goes back to Port Tanzia. Neko's Leave Online does the same."),
+                   game::net_can_request(game::NetRequest::Leave)))
         game::net_request(game::NetRequest::Leave);
     group_end(p);
-    group_begin(p, "Startup");
-    switch_row(p, "Skip boot notices", draft.skip_boot_notices,
-               "Answers the controller notice and the create-save prompts before the title screen by itself.");
+    group_begin(p, tr("启动", "Startup"));
+    switch_row(p, tr("跳过启动提示", "Skip boot notices"), draft.skip_boot_notices,
+               tr("在标题画面前自动确认手柄提示与创建存档提示。", "Answers the controller notice and the create-save prompts before the title screen by itself."));
     group_end(p);
 }
 
 // System: the game Cha-Cha runs, where its files are, and leaving the game.
 void Launcher::Impl::draw_page_system(PanelLayout& p) {
-    const std::string game_name = game ? "MH3U (v" + std::to_string(game->update.version) + ")" : "None";
-    group_begin(p, "Game");
-    info_row(p, "Game", game_name, "Your own dump of Monster Hunter 3 Ultimate: a .wua file, or the game and update folders. Nothing is copied.");
-    if (button_row(p, "Change game...", "Pick a .wua file. Takes effect on the next start once the game runs.", !dialog.pending)) {
+    const std::string game_name = game ? "MH3G HD (v" + std::to_string(game->update.version) + ")" : tr("未选择", "None");
+    group_begin(p, tr("游戏文件", "Game"));
+    info_row(p, tr("当前游戏", "Game"), game_name,
+             tr("你自己的《怪物猎人 3G HD Ver.》日版镜像：.wua 归档或游戏/更新目录。文件仅就地读取，不会复制。",
+                "Your own dump of Monster Hunter 3G HD Ver.: a .wua file, or the game and update folders. Nothing is copied."));
+    if (button_row(p, tr("更换游戏镜像...", "Change game..."),
+                   tr("选择一个 .wua 文件。如果游戏已启动，将在下次启动时生效。", "Pick a .wua file. Takes effect on the next start once the game runs."),
+                   !dialog.pending)) {
         sources.clear();
-        static const SDL_DialogFileFilter filters[] = {{"Wii U archive (*.wua)", "wua"}, {"All files", "*"}};
+        static const SDL_DialogFileFilter filters_zh[] = {{"Wii U 归档 (*.wua)", "wua"}, {"所有文件", "*"}};
+        static const SDL_DialogFileFilter filters_en[] = {{"Wii U archive (*.wua)", "wua"}, {"All files", "*"}};
         dialog.pending = true;
-        SDL_ShowOpenFileDialog(&DialogResult::callback, &dialog, window, filters, 2, nullptr, false);
+        SDL_ShowOpenFileDialog(&DialogResult::callback, &dialog, window, is_zh() ? filters_zh : filters_en, 2, nullptr, false);
     }
-    if (button_row(p, "Choose a game folder...", "Pick a dumped game or update folder (code, content, meta).", !dialog.pending)) {
+    if (button_row(p, tr("选择游戏目录...", "Choose a game folder..."),
+                   tr("选择已解包的游戏或更新目录（含 code、content、meta）。", "Pick a dumped game or update folder (code, content, meta)."),
+                   !dialog.pending)) {
         dialog.pending = true;
         SDL_ShowOpenFolderDialog(&DialogResult::callback, &dialog, window, nullptr, false);
     }
     group_end(p);
-    group_begin(p, "Files");
+    group_begin(p, tr("界面", "Interface"));
+    {
+        int lang_i = settings.language == "en" ? 1 : 0;
+        static const char* const kLangs[] = {"zh-CN", "en"};
+        static const std::string kLangNames[] = {"简体中文", "English"};
+        if (cycle(value_row(p, tr("界面语言 (Language)", "Language"), kLangNames[static_cast<size_t>(lang_i)],
+                            tr("切换启动器、设置面板、按键说明与内置模组界面的显示语言。立即生效。",
+                               "Switch the display language for the launcher, settings, controls and built-in mod UI. Applies immediately.")),
+                  lang_i, 2)) {
+            draft.language = kLangs[static_cast<size_t>(lang_i)];
+            settings.language = draft.language;
+            sync_language();
+            save_settings(paths, settings);
+        }
+    }
+    group_end(p);
+    group_begin(p, tr("文件与版本", "Files"));
     static std::string data_desc;
     {
         const auto u = paths.data.u8string();
-        data_desc = "Where settings, saves, caches, input.ini, mods and quests are kept.\n\n" + std::string(u.begin(), u.end());
+        data_desc = tr("存放设置、存档、着色器缓存、input.ini、模组与任务的目录。\n\n",
+                       "Where settings, saves, caches, input.ini, mods and quests are kept.\n\n") + std::string(u.begin(), u.end());
     }
-    if (button_row(p, "Data folder", data_desc.c_str(), true, short_path(paths.data, 26))) {
+    if (button_row(p, tr("打开数据目录", "Data folder"), data_desc.c_str(), true, short_path(paths.data, 26))) {
         std::string url = "file:///" + std::string(reinterpret_cast<const char*>(paths.data.u8string().c_str()));
         std::replace(url.begin(), url.end(), '\\', '/');
         SDL_OpenURL(url.c_str());
     }
-    info_row(p, "Version", std::string("Cha-Cha ") + MH3U_VERSION, "The build of Cha-Cha you are running.");
+    info_row(p, tr("程序版本", "Version"), std::string("Cha-Cha ") + MH3U_VERSION,
+             tr("当前运行的 Cha-Cha 构建版本。", "The build of Cha-Cha you are running."));
     group_end(p);
     if (mode == Mode::InGame) {  // issue #10: no way out but closing the window, which fullscreen hides
-        group_begin(p, "Session");
-        if (button_row(p, quit_armed ? "Quit now" : "Quit game",
-                       "Closes Cha-Cha. Progress since your last save in the game is lost. Select it twice to quit.")) {
+        group_begin(p, tr("会话", "Session"));
+        if (button_row(p, quit_armed ? tr("确认退出", "Quit now") : tr("退出游戏", "Quit game"),
+                       tr("关闭 Cha-Cha。自上次游戏内存档后的进度将会丢失，连续点击两次确认退出。",
+                          "Closes Cha-Cha. Progress since your last save in the game is lost. Select it twice to quit."))) {
             if (quit_armed) quit_requested = true;
             quit_armed = true;
         }
@@ -1853,13 +1983,20 @@ void Launcher::Impl::refresh_quests() {
     }
     if (added || removed) {
         quests_installed = quests::installed(save_dir());
-        std::string t = "Quest packs: ";
-        if (added) t += std::to_string(added) + " installed";
-        if (added && removed) t += ", ";
-        if (removed) t += std::to_string(removed) + " removed";
-        toast(t + (stale_in_game ? " - reload your save to see them" : ""));
+        std::string t = tr("任务包：", "Quest packs: ");
+        if (is_zh()) {
+            if (added) t += "已安装 " + std::to_string(added) + " 个";
+            if (added && removed) t += "，";
+            if (removed) t += "已移除 " + std::to_string(removed) + " 个";
+            toast(t + (stale_in_game ? "（重新读取存档后生效）" : ""));
+        } else {
+            if (added) t += std::to_string(added) + " installed";
+            if (added && removed) t += ", ";
+            if (removed) t += std::to_string(removed) + " removed";
+            toast(t + (stale_in_game ? " - reload your save to see them" : ""));
+        }
     } else if (!err.empty() && err.find("no save") == std::string::npos) {
-        toast("Quest packs: " + err);
+        toast(tr("任务包：", "Quest packs: ") + err);
     }
     quests_stale = false;
 }
@@ -1881,27 +2018,32 @@ void Launcher::Impl::draw_tab_quests(PanelLayout& p) {
     const auto u = quest_dir().u8string();
     const std::string folder(u.begin(), u.end());
     static std::string folder_desc, empty_desc;
-    folder_desc = "Official DLC and custom quests. Put each pack in its own folder here: q_<number>.quest files (with "
-                  "q_<number>.png and .txt for a picture and a description), or the quest1-quest4 files from a Wii U "
-                  "save. A pack.json (name, author, description) and cover.png describe a pack.\n\n" + folder;
-    group_begin(p, "Library");
-    if (button_row(p, "Quest folder", folder_desc.c_str(), true, "Open")) {
+    folder_desc = tr("官方 DLC 与自定义任务。可将每个任务包单独放进此处的子目录：例如 q_<编号>.quest 文件（可附带同编号 .png 与 .txt 作为配图和简介），"
+                     "或从 Wii U 存档提取的 quest1-quest4 文件。pack.json（name、author、description）与 cover.png 可用于描述任务包。\n\n",
+                     "Official DLC and custom quests. Put each pack in its own folder here: q_<number>.quest files (with "
+                     "q_<number>.png and .txt for a picture and a description), or the quest1-quest4 files from a Wii U "
+                     "save. A pack.json (name, author, description) and cover.png describe a pack.\n\n") + folder;
+    group_begin(p, tr("任务库", "Library"));
+    if (button_row(p, tr("打开任务文件夹", "Quest folder"), folder_desc.c_str(), true, tr("打开", "Open"))) {
         std::string url = "file:///" + folder;
         std::replace(url.begin(), url.end(), '\\', '/');
         SDL_OpenURL(url.c_str());
     }
-    if (button_row(p, "Refresh", "Read the quest folder again (after adding files while Cha-Cha runs).", true, "Rescan")) {
+    if (button_row(p, tr("刷新列表", "Refresh"), tr("重新扫描任务文件夹（在运行期间新增文件后使用）。", "Read the quest folder again (after adding files while Cha-Cha runs)."),
+                   true, tr("重新扫描", "Rescan"))) {
         quests_stale = true;
-        toast("Quest folder read again");
+        toast(tr("已重新扫描任务文件夹", "Quest folder read again"));
     }
     int ev = 0, ch = 0;
     for (const auto& q : quests_installed) ++(q.challenge() ? ch : ev);
     char used[64];
-    std::snprintf(used, sizeof used, "%d / 60 event, %d / 20 challenge", ev, ch);
-    info_row(p, "Installed", used, "Quests in your save. They are listed at the Port Tanzia Gathering Hall with the event and challenge quests.");
+    std::snprintf(used, sizeof used, tr("活动 %d / 60，挑战 %d / 20", "%d / 60 event, %d / 20 challenge"), ev, ch);
+    info_row(p, tr("已安装到存档", "Installed"), used,
+             tr("当前写入存档的任务数量。安装后可在坦齐亚港集会所的活动/挑战任务列表中看到。",
+                "Quests in your save. They are listed at the Port Tanzia Gathering Hall with the event and challenge quests."));
     if (quest_library.quests.empty()) {
-        empty_desc = "No quests in " + folder + " yet.";
-        info_row(p, "No quests in the folder yet", "", empty_desc.c_str());
+        empty_desc = is_zh() ? folder + " 中暂无任务文件。" : "No quests in " + folder + " yet.";
+        info_row(p, tr("文件夹内暂无任务", "No quests in the folder yet"), "", empty_desc.c_str());
     }
     group_end(p);
     const auto is_installed = [&](const quests::Quest& q) {
@@ -1927,20 +2069,22 @@ void Launcher::Impl::draw_tab_quests(PanelLayout& p) {
     std::vector<size_t> order(quest_library.packs.size());
     for (size_t i = 0; i < order.size(); ++i) order[i] = i;
     std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return quest_library.packs[a].official > quest_library.packs[b].official; });
-    if (!order.empty()) group_begin(p, "Packs");
+    if (!order.empty()) group_begin(p, tr("任务包", "Packs"));
     for (size_t pi : order) {
         const quests::Pack& pk = quest_library.packs[pi];
         const quests::PackMode pm = pack_mode(pk);
         int m = static_cast<int>(pm);
-        static const char* const kModes[] = {"All", "Choose", "Off"};
-        std::string value = kModes[m];
+        static const char* const kModesZh[] = {"全部安装", "手动勾选", "全部移除"};
+        static const char* const kModesEn[] = {"All", "Choose", "Off"};
+        std::string value = (is_zh() ? kModesZh : kModesEn)[m];
         if (pm == quests::PackMode::All) value += " (" + std::to_string(pk.quests.size()) + ")";
         ImGui::PushID(pk.key.c_str());
         if (cycle(value_row(p, pk.name.c_str(), value, pk.description.c_str()), m, 3)) {
             pack_modes[pk.key] = static_cast<quests::PackMode>(m);
             save_pack_modes();
             quests_stale = true;  // applied when the list is read again (next frame)
-            toast(pk.name + (m == 0 ? ": every quest installed" : m == 2 ? ": removed" : ": choose quests one by one"));
+            toast(pk.name + (is_zh() ? (m == 0 ? "：已安装全部任务" : m == 2 ? "：已全部移除" : "：可逐个勾选任务")
+                                     : (m == 0 ? ": every quest installed" : m == 2 ? ": removed" : ": choose quests one by one")));
         }
         if (p.sel_title == pk.name.c_str()) p.sel_image = pk.image;
         ImGui::PopID();
@@ -1951,7 +2095,7 @@ void Launcher::Impl::draw_tab_quests(PanelLayout& p) {
     bool loose_head = false;
     for (const auto& q : quest_library.quests)
         if (q.pack < 0) {
-            if (!loose_head) group_begin(p, "Single quests");
+            if (!loose_head) group_begin(p, tr("单个任务", "Single quests"));
             loose_head = true;
             quest_row(q, 0);
         }
@@ -1959,10 +2103,10 @@ void Launcher::Impl::draw_tab_quests(PanelLayout& p) {
     bool save_head = false;
     for (const auto& q : quests_installed)  // in the save but not in the folder: can still be removed
         if (std::none_of(quest_library.quests.begin(), quest_library.quests.end(), [&](const quests::Quest& l) { return l.name == q.name; })) {
-            if (!save_head) group_begin(p, "Only in your save");
+            if (!save_head) group_begin(p, tr("仅存在于存档中", "Only in your save"));
             save_head = true;
             ImGui::PushID(q.name.c_str());
-            if (button_row(p, q.title.c_str(), q.description.c_str(), true, "Remove")) {
+            if (button_row(p, q.title.c_str(), q.description.c_str(), true, tr("移除", "Remove"))) {
                 act = &q;
                 act_remove = true;
             }
@@ -1975,10 +2119,12 @@ void Launcher::Impl::draw_tab_quests(PanelLayout& p) {
     stale_in_game = false;
     if (change_quest(*act, act_remove, err)) {
         g_sound.play(Sfx::Apply);
-        toast((act_remove ? "Removed " : "Installed ") + title + (stale_in_game ? " - reload your save to see it" : ""));
+        if (is_zh()) toast((act_remove ? "已移除 " : "已安装 ") + title + (stale_in_game ? "（重新读取存档后生效）" : ""));
+        else toast((act_remove ? "Removed " : "Installed ") + title + (stale_in_game ? " - reload your save to see it" : ""));
     } else {
         g_sound.play(Sfx::Back);
-        toast("Couldn't " + std::string(act_remove ? "remove " : "install ") + title + ": " + err);
+        if (is_zh()) toast((act_remove ? "移除失败 " : "安装失败 ") + title + "：" + err);
+        else toast("Couldn't " + std::string(act_remove ? "remove " : "install ") + title + ": " + err);
     }
     quests_stale = true;  // re-read next frame (the rows above point into the lists)
 }
@@ -1992,42 +2138,59 @@ void Launcher::Impl::draw_tab_mods(PanelLayout& p) {
     const auto u = plugins::mods_dir(paths.data).u8string();
     const std::string folder(u.begin(), u.end());
     static std::string folder_desc;
-    folder_desc = "Each mod is a folder here. A mod's content folder replaces or adds game files (the same paths as the "
-                  "game's content folder); its plugins folder holds native plugins (.dll on Windows, .so on Linux) "
-                  "that can draw over the game and add settings here. A mod.ini (name, author, version, description) "
-                  "describes it.\n\nMods switched on or off apply on the next start.\n\n" + folder;
+    const bool zh = is_zh();
+    folder_desc = tr("每个模组对应一个子文件夹。其中 content 目录会按游戏 content 路径覆盖或新增文件；plugins 目录可放原生插件（Windows 为 .dll，Linux 为 .so），"
+                     "用于扩展画面覆盖层并在此页面提供设置。mod.ini 可描述名称、作者、版本与简介。\n\n模组开关更改将在下次启动时生效。\n\n",
+                     "Each mod is a folder here. A mod's content folder replaces or adds game files (the same paths as the "
+                     "game's content folder); its plugins folder holds native plugins (.dll on Windows, .so on Linux) "
+                     "that can draw over the game and add settings here. A mod.ini (name, author, version, description) "
+                     "describes it.\n\nMods switched on or off apply on the next start.\n\n") + folder;
     std::vector<plugins::Mod>& mods = plugins::mods();
-    group_begin(p, "Library");
-    if (button_row(p, "Mods folder", folder_desc.c_str(), true, "Open")) {
+    group_begin(p, tr("模组库", "Library"));
+    if (button_row(p, tr("打开模组文件夹", "Mods folder"), folder_desc.c_str(), true, tr("打开", "Open"))) {
         std::string url = "file:///" + folder;
         std::replace(url.begin(), url.end(), '\\', '/');
         SDL_OpenURL(url.c_str());
     }
-    if (mods.empty()) info_row(p, "No mods in the folder yet", "", folder_desc.c_str());
+    if (mods.empty()) info_row(p, tr("文件夹内暂无模组", "No mods in the folder yet"), "", folder_desc.c_str());
     group_end(p);
     static std::vector<std::string> descs;  // the description pane points into these until the next frame
     descs.resize(mods.size() * 2);
     for (size_t i = 0; i < mods.size(); ++i) {
         plugins::Mod& m = mods[i];
         ImGui::PushID(m.folder.c_str());
+        const std::string& mod_name = m.display_name(zh);
+        const std::string& mod_desc = m.display_description(zh);
         std::string& d = descs[i * 2];
-        d = m.description.empty() ? std::string() : m.description + "\n\n";
-        if (!m.author.empty()) d += "By " + m.author + (m.version.empty() ? "" : ", version " + m.version) + ".\n";
-        else if (!m.version.empty()) d += "Version " + m.version + ".\n";
-        if (m.has_content) d += std::to_string(m.content_files) + " game files replaced or added.\n";
-        if (!m.plugin_files.empty()) d += std::to_string(m.plugin_files.size()) + (m.plugin_files.size() == 1 ? " plugin.\n" : " plugins.\n");
-        d += "\nFolder: " + m.folder;
-        if (booted && m.enabled != m.active) d += "\n\nApplies on the next start.";
-        group_begin(p, m.name.c_str());
+        d = mod_desc.empty() ? std::string() : mod_desc + "\n\n";
+        if (zh) {
+            if (!m.author.empty()) d += "作者：" + m.author + (m.version.empty() ? "" : "，版本 " + m.version) + "\n";
+            else if (!m.version.empty()) d += "版本：" + m.version + "\n";
+            if (m.has_content) d += "替换或新增 " + std::to_string(m.content_files) + " 个游戏文件。\n";
+            if (!m.plugin_files.empty()) d += "包含 " + std::to_string(m.plugin_files.size()) + " 个插件。\n";
+            d += "\n目录：" + m.folder;
+            if (booted && m.enabled != m.active) d += "\n\n将在下次启动时生效。";
+        } else {
+            if (!m.author.empty()) d += "By " + m.author + (m.version.empty() ? "" : ", version " + m.version) + ".\n";
+            else if (!m.version.empty()) d += "Version " + m.version + ".\n";
+            if (m.has_content) d += std::to_string(m.content_files) + " game files replaced or added.\n";
+            if (!m.plugin_files.empty()) d += std::to_string(m.plugin_files.size()) + (m.plugin_files.size() == 1 ? " plugin.\n" : " plugins.\n");
+            d += "\nFolder: " + m.folder;
+            if (booted && m.enabled != m.active) d += "\n\nApplies on the next start.";
+        }
+        group_begin(p, mod_name.c_str());
         bool on = m.enabled;
-        if (switch_row(p, "Enabled", on, d.c_str())) {
+        if (switch_row(p, tr("启用", "Enabled"), on, d.c_str())) {
             plugins::set_enabled(i, on);
-            toast(m.name + (on ? " on" : " off") + (booted ? " from the next start" : ""));
+            if (zh) toast(mod_name + (on ? " 已开启" : " 已关闭") + (booted ? "（下次启动生效）" : ""));
+            else toast(mod_name + (on ? " on" : " off") + (booted ? " from the next start" : ""));
         }
         for (const plugins::PluginState& ps : m.plugins) {
             std::string& pd = descs[i * 2 + 1];
-            pd = ps.loaded ? ps.name + (ps.version.empty() ? "" : " " + ps.version) + " is running." : "Not loaded: " + ps.error;
-            info_row(p, ps.file.c_str(), ps.loaded ? "Running" : "Not loaded", pd.c_str());
+            const std::string& pn = zh && !m.name_zh.empty() && ps.name == m.name ? m.name_zh : ps.name;
+            if (zh) pd = ps.loaded ? pn + (ps.version.empty() ? "" : " " + ps.version) + " 正在运行。" : "未加载：" + ps.error;
+            else pd = ps.loaded ? pn + (ps.version.empty() ? "" : " " + ps.version) + " is running." : "Not loaded: " + ps.error;
+            info_row(p, ps.file.c_str(), ps.loaded ? tr("运行中", "Running") : tr("未加载", "Not loaded"), pd.c_str());
         }
         group_end(p);
         if (m.active && plugins::has_settings(i)) {
@@ -2047,30 +2210,41 @@ void Launcher::Impl::draw_tab_mods(PanelLayout& p) {
         ImGui::PopID();
     }
     // always the last rows of the page, however many mods there are: one Save / Restore for all of them
-    group_begin(p, "All mods");
-    if (button_row(p, "Save settings", "Keeps every mod's settings for the next start (settings.ini in each mod's folder)."))
-        toast(plugins::save_all() ? "Mod settings saved" : "No mod has settings to save");
-    if (button_row(p, "Restore defaults", "Puts every mod's settings back to its defaults. Save settings keeps them."))
-        toast(plugins::defaults_all() ? "Mod settings back to their defaults" : "No mod has settings to restore");
+    group_begin(p, tr("全部模组", "All mods"));
+    if (button_row(p, tr("保存模组设置", "Save settings"),
+                   tr("保存所有模组的当前设置到各自文件夹中的 settings.ini，下次启动自动加载。",
+                      "Keeps every mod's settings for the next start (settings.ini in each mod's folder).")))
+        toast(plugins::save_all() ? tr("模组设置已保存", "Mod settings saved") : tr("没有需要保存设置的模组", "No mod has settings to save"));
+    if (button_row(p, tr("恢复默认设置", "Restore defaults"),
+                   tr("将所有模组的设置恢复为默认值，随后点击“保存模组设置”即可持久化。",
+                      "Puts every mod's settings back to its defaults. Save settings keeps them.")))
+        toast(plugins::defaults_all() ? tr("模组设置已恢复默认", "Mod settings back to their defaults")
+                                      : tr("没有可恢复默认值的模组", "No mod has settings to restore"));
     group_end(p);
 }
 
 void Launcher::Impl::draw_tab_input(PanelLayout& p, float table_w) {
     input::ControlOptions o = input::control_options();
     static const std::vector<float> kSens = {0.025f, 0.05f, 0.08f, 0.12f};
-    static const std::vector<std::string> kSensNames = {"Low", "Medium", "High", "Very high"};
+    static const std::vector<std::string> kSensNamesZh = {"低", "中", "高", "极高"};
+    static const std::vector<std::string> kSensNamesEn = {"Low", "Medium", "High", "Very high"};
+    const auto& sens_names = is_zh() ? kSensNamesZh : kSensNamesEn;
     int layout = o.nintendo_layout ? 1 : 0, sens = 0;
     for (size_t i = 0; i < kSens.size(); ++i)
         if (std::abs(kSens[i] - o.mouse_sensitivity) < std::abs(kSens[static_cast<size_t>(sens)] - o.mouse_sensitivity)) sens = static_cast<int>(i);
-    group_begin(p, "Controller and mouse");
-    bool changed = cycle(value_row(p, "Controller layout", layout ? "Nintendo (by position)" : "Xbox (A / Cross confirms)", nullptr), layout, 2);
-    changed |= cycle(value_row(p, "Mouse sensitivity", kSensNames[static_cast<size_t>(sens)], nullptr), sens, 4);
-    changed |= switch_row(p, "Invert camera Y", o.invert_y, nullptr);
+    group_begin(p, tr("手柄与鼠标", "Controller and mouse"));
+    bool changed = cycle(value_row(p, tr("手柄按键布局", "Controller layout"),
+                                   layout ? tr("任天堂布局（按物理位置）", "Nintendo (by position)")
+                                          : tr("Xbox 布局（A / × 确认）", "Xbox (A / Cross confirms)"),
+                                   nullptr),
+                         layout, 2);
+    changed |= cycle(value_row(p, tr("鼠标视角灵敏度", "Mouse sensitivity"), sens_names[static_cast<size_t>(sens)], nullptr), sens, 4);
+    changed |= switch_row(p, tr("反转视角 Y 轴", "Invert camera Y"), o.invert_y, nullptr);
     // camera speed: 30% .. 100% of the game's own turn rate (keyboard, mouse and controller)
     int speed = std::clamp(static_cast<int>(std::lround(o.camera_speed * 10.0f)) - 3, 0, 7);
-    changed |= cycle(value_row(p, "Camera speed", std::to_string((speed + 3) * 10) + "%",
-                               "How fast the camera turns left and right and tilts up and down, for the controller, the camera keys and "
-                               "the mouse alike. 100% is the game's own speed."),
+    changed |= cycle(value_row(p, tr("视角转动速度", "Camera speed"), std::to_string((speed + 3) * 10) + "%",
+                               tr("控制左右转向与上下仰俯速度，对手柄、键盘视角键和鼠标均有效。100% 为游戏原版速度。",
+                                  "How fast the camera turns left and right and tilts up and down, for the controller, the camera keys and the mouse alike. 100% is the game's own speed.")),
                      speed, 8);
     group_end(p);
     if (changed) {
@@ -2084,13 +2258,13 @@ void Launcher::Impl::draw_tab_input(PanelLayout& p, float table_w) {
     const bool waiting = capturing && std::chrono::steady_clock::now() - capture_since < std::chrono::seconds(6);
     if (!waiting) capturing = false;
     const float s = scale, col_key = table_w * 0.34f, col_pad = table_w * 0.67f;
-    group_begin(p, "Bindings");
+    group_begin(p, tr("按键映射", "Bindings"));
     ImDrawList* dl = ImGui::GetWindowDrawList();
     {  // the column titles, inside the card
         const float y = ImGui::GetCursorScreenPos().y + 14 * s;
-        dl->AddText(fonts.note, fonts.note->FontSize, ImVec2(p.x + 16 * s, y), kDim, "Game button");
-        dl->AddText(fonts.note, fonts.note->FontSize, ImVec2(p.x + col_key, y), kDim, "Keyboard / mouse");
-        dl->AddText(fonts.note, fonts.note->FontSize, ImVec2(p.x + col_pad, y), kDim, "Controller");
+        dl->AddText(fonts.note, fonts.note->FontSize, ImVec2(p.x + 16 * s, y), kDim, tr("游戏按键", "Game button"));
+        dl->AddText(fonts.note, fonts.note->FontSize, ImVec2(p.x + col_key, y), kDim, tr("键盘 / 鼠标", "Keyboard / mouse"));
+        dl->AddText(fonts.note, fonts.note->FontSize, ImVec2(p.x + col_pad, y), kDim, tr("手柄", "Controller"));
         ImGui::Dummy(ImVec2(1, fonts.note->FontSize + 22 * s));
     }
     for (const input::BindingRow& row : input::binding_rows()) {
@@ -2111,7 +2285,9 @@ void Launcher::Impl::draw_tab_input(PanelLayout& p, float table_w) {
                 dl->AddRectFilled(c0, c1, this_one ? IM_COL32(236, 178, 84, 60) : kHover, 8 * s);
                 if (this_one || (focused && nav_cursor_visible())) dl->AddRect(c0, c1, kAmber, 8 * s, 0, 2.0f * s);
             }
-            std::string text = this_one ? (pad ? "Press a button..." : "Press a key...") : pad ? input::pad_names(row.target) : input::key_names(row.target);
+            std::string text = this_one ? (pad ? tr("请按手柄按键...", "Press a button...") : tr("请按键盘/鼠标...", "Press a key..."))
+                             : pad      ? input::pad_names(row.target)
+                                        : input::key_names(row.target);
             if (text.empty()) text = "-";
             dl->AddText(fonts.body, fonts.body->FontSize, ImVec2(c0.x + 12 * s, r.y + (p.row_h - fonts.body->FontSize) * 0.5f),
                         this_one ? IM_COL32(255, 220, 150, 255) : enabled ? kSoft : kOff, text.c_str());
@@ -2130,7 +2306,7 @@ void Launcher::Impl::draw_tab_input(PanelLayout& p, float table_w) {
     }
     group_end(p);
     group_begin(p, nullptr);
-    if (button_row(p, "Reset controls to defaults", nullptr)) {
+    if (button_row(p, tr("恢复默认按键", "Reset controls to defaults"), nullptr)) {
         input::reset_bindings();
         input::save_bindings();
     }
@@ -2138,7 +2314,10 @@ void Launcher::Impl::draw_tab_input(PanelLayout& p, float table_w) {
     ImGui::PushFont(fonts.note);
     ImGui::SetCursorScreenPos(ImVec2(p.x + 6 * s, ImGui::GetCursorScreenPos().y - 14 * s));
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(kDim));
-    ImGui::TextUnformatted(capturing ? "Esc cancels, Delete clears this binding." : "Choose a cell, then press the key or button for it. F1 and Home stay reserved.");
+    ImGui::TextUnformatted(capturing
+                               ? tr("按 Esc 取消，按 Delete 清除当前绑定。", "Esc cancels, Delete clears this binding.")
+                               : tr("选中单元格后按下要绑定的键盘/鼠标或手柄按键。F1 与 Home 键保留用于设置。",
+                                    "Choose a cell, then press the key or button for it. F1 and Home stay reserved."));
     ImGui::PopStyleColor();
     ImGui::PopFont();
 }
@@ -2243,22 +2422,24 @@ void Launcher::Impl::draw_keyboard(ImVec2 size) {
     if (key_button("shift", kb_shift ? "abc" : "ABC", ImVec2(x, y), wide(2))) kb_shift = !kb_shift;
     badge(ImVec2(x, y), wide(2), p_shift);
     x += wide(2) + gap;
-    if (key_button("space", "SPACE", ImVec2(x, y), wide(3))) type(u' ');
+    if (key_button("space", tr("空格", "SPACE"), ImVec2(x, y), wide(3))) type(u' ');
     badge(ImVec2(x, y), wide(3), p_space);
     x += wide(3) + gap;
-    if (key_button("delete", "DELETE", ImVec2(x, y), wide(2))) backspace = true;
+    if (key_button("delete", tr("退格", "DELETE"), ImVec2(x, y), wide(2))) backspace = true;
     badge(ImVec2(x, y), wide(2), p_del);
     x += wide(2) + gap;
-    if (key_button("cancel", "CANCEL", ImVec2(x, y), wide(1.5f))) cancel = true;
+    if (key_button("cancel", tr("取消", "CANCEL"), ImVec2(x, y), wide(1.5f))) cancel = true;
     x += wide(1.5f) + gap;
-    if (key_button("ok", "OK", ImVec2(x, y), b.x - pad - x)) confirm = true;
+    if (key_button("ok", tr("确定", "OK"), ImVec2(x, y), b.x - pad - x)) confirm = true;
     badge(ImVec2(x, y), b.x - pad - x, p_ok);
     y += kh + gap;
     // the hint line, in the controller's own button names (keyboard / mouse when none is connected)
     std::string hint;
-    for (const auto& [name, what] : {std::pair{p_type, "type"}, {p_del, "delete"}, {p_space, "space"}, {p_shift, "shift"}, {p_ok, "OK"}})
+    for (const auto& [name, what] : {std::pair{p_type, tr("输入", "type")}, {p_del, tr("删除", "delete")}, {p_space, tr("空格", "space")},
+                                     {p_shift, tr("大小写", "shift")}, {p_ok, tr("确定", "OK")}})
         if (!name.empty()) hint += (hint.empty() ? "" : "     ") + name + "  " + what;
-    if (hint.empty()) hint = "Type on your keyboard or click the keys.   Enter OK   Esc cancel";
+    if (hint.empty()) hint = tr("使用键盘直接输入或点击按键。   Enter 确定   Esc 取消",
+                                "Type on your keyboard or click the keys.   Enter OK   Esc cancel");
     dl->AddText(fonts.note, fonts.note->FontSize, ImVec2(a.x + pad, y), kDim, hint.c_str());
 
     if (backspace && !text.empty()) text.pop_back();
