@@ -13,7 +13,7 @@ import ghidra.program.model.listing.*;
 import ghidra.program.model.mem.MemoryBlock;
 
 public class CreateFunctions extends GhidraScript {
-    static final long CTOR_TABLE = 0x101632C4L, CTOR_TABLE_END = 0x1016455CL;  // inclusive, 1191 entries
+    static final long CTOR_TABLE = 0x10163084L, CTOR_TABLE_END = 0x10164320L;  // inclusive, 1192 entries
 
     private MemoryBlock text;
     private int created, existed, inside, failed;

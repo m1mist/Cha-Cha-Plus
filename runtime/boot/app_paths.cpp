@@ -177,7 +177,7 @@ std::vector<stdfs::path> repo_game_sources(const AppPaths& p) {
         return out;
     }
     if (p.repo.empty()) return out;
-    if (stdfs::exists(p.repo / "extracted" / "0005000e10118300_v32", ec)) out.push_back(p.repo / "extracted");
+    if (stdfs::exists(p.repo / "extracted" / "0005000010104d00_v96", ec)) out.push_back(p.repo / "extracted");
     else
         for (const auto& e : stdfs::directory_iterator(p.repo / "game", ec))
             if (e.path().extension() == ".wua") {

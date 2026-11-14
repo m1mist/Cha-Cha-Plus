@@ -1,14 +1,14 @@
 // Menu mouse (always on): tells host input when one of the game's menus is open, so the mouse is a pointer there
 // (right click = B, wheel = up / down, left clicks as below) instead of turning the camera.
 //
-// Replaces: sAppPad::vf6 (0x020E0CFC, the pad system's per-frame update; the original runs, then the menu state is
-// read) and sLobby::menuDirections? (0x0221A430, wrapped to see that it was called). Status: wip - read in Ghidra,
+// Replaces: sAppPad::vf6 (0x020E060C, the pad system's per-frame update; the original runs, then the menu state is
+// read) and sLobby::menuDirections? (0x0221A940, wrapped to see that it was called). Status: wip - read in Ghidra,
 // signals checked headless with MH3U_MENU_PROBE (docs/research-log.md, "Menu mouse"); not yet seen in a window.
 //
 // A menu is open while any of these holds:
 // - sGame+0x48 == 0: the start-menu screens (title, Continue / New Game, character creation); 2 = village, 1 = quest;
 // - sMenu+0x4C != 0: the field menu (− on the Pro Controller; set from the frame it opens until it closes);
-// - a lobby menu read its key-repeat directions this frame: FUN_0221A430 (185 calls in 97 functions, nearly all sLobby
+// - a lobby menu read its key-repeat directions this frame: FUN_0221a940 (185 calls in 97 functions, nearly all sLobby
 //   menu steps - item box, shops, NPCs) is not called at all in the village or the field menu.
 // Closing waits kCloseFrames, so a frame between two menu steps (an animation, a sub-list opening) does not flicker the
 // pointer.
@@ -19,7 +19,7 @@
 // (screens() below), Character Creation's gradients and Skin Tone slider (analog_hover), Yes / No prompts
 // (two_choice), the item box options (item_sets.cpp). Every other menu (the other lobby menus) gets A for a click.
 //
-// MH3U_MENU_PROBE=1 logs the menu state fields when they change and the callers of FUN_0221A430 in each frame, for
+// MH3U_MENU_PROBE=1 logs the menu state fields when they change and the callers of FUN_0221a940 in each frame, for
 // mapping more menus.
 #include "menu_mouse.h"
 
@@ -44,7 +44,7 @@
 namespace mh3u::game {
 namespace {
 
-constexpr uint32_t kSGame = 0x101FDB9C, kSMenu = 0x10314980, kSID = 0x10314578, kSLobby = 0x103147A0, kSAppPad = 0x10312BB0;
+constexpr uint32_t kSGame = 0x101FD9CC, kSMenu = 0x10314680, kSID = 0x10314278, kSLobby = 0x103144A0, kSAppPad = 0x103127F0;
 constexpr int kCloseFrames = 8;
 
 constexpr int kHoverFrames = 3;  // a hover menu that stopped calling menu_pointer gives clicks back after this
@@ -53,7 +53,7 @@ Pointer g_pointer;
 bool g_probe = false;
 std::atomic<int> g_hover_frames{0};  // menu_pointer called lately
 std::atomic<int> g_clicks{0};        // clicks for the hover menu (menu_click)
-bool g_lobby_menu = false;  // FUN_0221A430 called since the last pad update
+bool g_lobby_menu = false;  // FUN_0221a940 called since the last pad update
 bool g_prompt = false;      // a Yes / No prompt ran since then (two_choice, message_choice): not every one reads the
                             // lobby directions (the village's "Save your progress?" does not)
 int g_open_frames = 0;      // frames the pointer stays on without a signal
@@ -248,7 +248,7 @@ bool menu_signal(uint8_t* base) {
     return g_lobby_menu || g_prompt;
 }
 
-// The Options pages (FUN_0275BD84(object, page): 8 the list, 18 Sound, 19 Effect, 20 Game, 22 Monitor, 23 Controller,
+// The Options pages (FUN_0275b908(object, page): 8 the list, 18 Sound, 19 Effect, 20 Game, 22 Monitor, 23 Controller,
 // 24 Language - the page numbers are the start menu's states): which object and page ran this frame
 std::atomic<uint32_t> g_option{0}, g_option_page{0}, g_option_frame{0};
 PPC_FUNC(option_page) {
@@ -261,7 +261,7 @@ PPC_FUNC(option_page) {
     // Controller Settings (page 23) stores the controller choice as it moves. With MH3U_CONTROLLER=both (the default
     // since issue #6) host input drives the Pro Controller and the GamePad alike, so either choice works and the page is
     // left alone. In the other modes choosing the missing controller leaves no working input: its step then sees no
-    // left / right (menu bits 4 / 8 of sAppPad +0x6C and +0x80, what FUN_0275A4A8 reads), so the choice cannot change;
+    // left / right (menu bits 4 / 8 of sAppPad +0x6C and +0x80, what FUN_0275a04c reads), so the choice cannot change;
     // B still leaves the page.
     const uint32_t pad = ctx.r[4] == 23 && !(g_pointer.both_controllers && g_pointer.both_controllers()) ? ppc::ld32(base, kSAppPad) : 0;
     const uint32_t trig = pad ? ppc::ld32(base, pad + 0x6C) : 0, rep = pad ? ppc::ld32(base, pad + 0x80) : 0;
@@ -269,38 +269,38 @@ PPC_FUNC(option_page) {
         ppc::st32(base, pad + 0x6C, trig & ~0xCu);
         ppc::st32(base, pad + 0x80, rep & ~0xCu);
     }
-    sub_0275BD84__orig(ctx, base);
+    sub_0275B908__orig(ctx, base);
     if (pad) {
         ppc::st32(base, pad + 0x6C, trig);
         ppc::st32(base, pad + 0x80, rep);
     }
 }
 
-// MH3U_MENU_LEARN also records the callers of the game's cursor-step helpers (FUN_020431F8, FUN_020432BC,
-// FUN_020432C8: cursor, count, direction bits -> the new cursor), which the menus that read the pad themselves use
-// too - the quest results (FUN_020E8DD4), the quest's supply box. Only wrapped while learning.
+// MH3U_MENU_LEARN also records the callers of the game's cursor-step helpers (FUN_02042da0, FUN_02042e64,
+// FUN_02042e70: cursor, count, direction bits -> the new cursor), which the menus that read the pad themselves use
+// too - the quest results (FUN_020ea340), the quest's supply box. Only wrapped while learning.
 PPC_FUNC(learn_cursor_a) {
     g_callers.insert(ctx.lr);
-    sub_020431F8__orig(ctx, base);
+    sub_02042DA0__orig(ctx, base);
 }
 PPC_FUNC(learn_cursor_b) {
     g_callers.insert(ctx.lr);
-    sub_020432BC__orig(ctx, base);
+    sub_02042E64__orig(ctx, base);
 }
 PPC_FUNC(learn_cursor_c) {
     g_callers.insert(ctx.lr);
-    sub_020432C8__orig(ctx, base);
+    sub_02042E70__orig(ctx, base);
 }
 
 PPC_FUNC(menu_directions) {
     g_lobby_menu = true;
     if (g_probe || g_learn) g_callers.insert(ctx.lr);
-    sub_0221A430__orig(ctx, base);
+    sub_0221A940__orig(ctx, base);
 }
 
 // ---- start-menu screens and the Options pages ----
 // Each screen is found by a key - the start menu's state (uIDStartMenu+0x2A0; the widget comes from boot_prompts) or
-// the Options page that ran last frame (uIDOption via FUN_0275BD84, from the start menu or the game's own menu) - and
+// the Options page that ran last frame (uIDOption via FUN_0275b908, from the start menu or the game's own menu) - and
 // lists its items as boxes in TV pixels with the field holding the game's cursor. Cursors were found by snapshot diffs
 // over d-pad presses (MH3U_MENU_SNAP) and in Ghidra (the Options page steps); boxes measured on 1920 x 1080 frame
 // dumps. Hover steps the game's own cursor with d-pad taps, one step at a time, so its highlight, sound and help text
@@ -361,7 +361,7 @@ const std::vector<Screen>& screens() {
         // Main Menu: New Game, Continue, Options, Data Transfer, DLC
         v.push_back({"main menu", Source::StartMenu, 7, 0x2AC, 4, false, true, rows(5, 588, 1336, 201, 110, 126)});
         // Character Select's "Use this character?" (sub-state +0x290 == 6; an empty slot asks nothing): Yes above No in
-        // the help box, cursor the byte sMenu+0x59 (0 Yes, 1 No; up / down step it, wrapping), from FUN_02764E60
+        // the help box, cursor the byte sMenu+0x59 (0 Yes, 1 No; up / down step it, wrapping), from FUN_02765114
         Screen use{"character prompt", Source::StartMenu, 14, 0x59, 1, false, true, {{1250, 870, 1468, 922}, {1250, 936, 1468, 992}}};
         use.sub = 0x290, use.sub_value = 6, use.cursor_in_menu = true;
         v.push_back(use);
@@ -444,7 +444,7 @@ const std::vector<Screen>& screens() {
         Screen monsters = field_sub("monster list", 37, 0x225, rows(8, 1415, 1825, 284, 46, 52));
         monsters.sub_value = 1, monsters.page = 8, monsters.count = 0x229;
         v.push_back(monsters);
-        // Guild Card List (+0x35 15): its own widget, uIDLobbyCardList (step FUN_0268E7DC, wrapped: card_list_step),
+        // Guild Card List (+0x35 15): its own widget, uIDLobbyCardList (step FUN_0268eb7c, wrapped: card_list_step),
         // 8 rows a page: row +0x3D4 (s8; up / down, wrapping), page +0x3D8 (s16; left / right), the cards' slots s8 at
         // +0x3DC + page * 8 + row (< 0: empty); A views the card there. Rows measured on a frame dump.
         Screen cards{"guild card list", Source::CardList, 0, 0x3D4, 1, false, true, rows(8, 162, 1756, 240, 58, 66.6f)};
@@ -452,7 +452,7 @@ const std::vector<Screen>& screens() {
         v.push_back(cards);
         // Character Creation (uIDMakeCharacter, cursor +0x884: 1 Name, 2 gender, 4 Clothing / 5 Clothing Color, 6 Face /
         // 7 Features, 8 Hairstyle / 9 Hair Color, 10 Voice / 3 Skin Tone, 11 OK; 0 while a sub-screen is open; read by
-        // FUN_027512A0, numbering from d-pad walks). Left / right are only pressed between the two columns, never on the
+        // FUN_02750e58, numbering from d-pad walks). Left / right are only pressed between the two columns, never on the
         // gender row (they change the gender there).
         Screen make{"character creation", Source::MakeCharacter, 0, 0x884, 4, false, true,
                     {{135, 267, 570, 325}, {570, 285, 800, 380},                        // Name, gender
@@ -520,13 +520,13 @@ std::atomic<uint32_t> g_message_frame{0}, g_message_value{0};  // the message bo
 const Screen kMessageBox{"message box", Source::StartMenu, 0, 1, 4, true, true, {{690, 595, 925, 668}, {1000, 595, 1230, 668}}};
 
 // ---- Character Creation's analog pickers ----
-// Skin Tone's slider (sub-screen 3, step FUN_02754C04: left / right step the int +0x8B4, 0-99; FUN_027518E8 moves the
+// Skin Tone's slider (sub-screen 3, step FUN_027547bc: left / right step the int +0x8B4, 0-99; FUN_027514a0 moves the
 // knob and recolours the skin) and the gradients under Clothing Color / Hair Color's swatches (sub-screens 5 / 9, mode
-// 3 after A on the gradient: the d-pad steps floats x 0-175, y 0-50 - FUN_0275274C / FUN_027527C0, FUN_02752120 /
-// FUN_02752194 - and FUN_02752470 / FUN_02751E5C redraw). Both steps take A as "done" (back to the swatches / out of
+// 3 after A on the gradient: the d-pad steps floats x 0-175, y 0-50 - FUN_02752304 / FUN_02752378, FUN_02751cd8 /
+// FUN_02751d4c - and FUN_02752028 / FUN_02751a14 redraw). Both steps take A as "done" (back to the swatches / out of
 // Skin Tone). The pointer over a picker sets its value as the pad would, so the knob and the model follow it; a click
 // on it confirms (A), one beside it does nothing. The knob sits at the area's x0 / y0 + value / max * its size
-// (FUN_027518E8: 618 px for 100; the gradients 400 x 116 px), measured on frame dumps.
+// (FUN_027514a0: 618 px for 100; the gradients 400 x 116 px), measured on frame dumps.
 struct Analog {
     const char* name;
     uint32_t open, mode;  // uIDMakeCharacter +0x868 (the sub-screen) and +0x874 (its mode)
@@ -535,9 +535,9 @@ struct Analog {
     void (*refresh)(ppc::Context&, uint8_t*);
 };
 const Analog kAnalogs[] = {
-    {"skin tone", 3, 2, 0x8B4, 0, 99, 0, 288, 528, 618 * 0.99f, 0, sub_027518E8},
-    {"clothing gradient", 5, 3, 0x8AC, 0x8B0, 175, 50, 200, 610, 400, 116, sub_02752470},
-    {"hair gradient", 9, 3, 0x8A4, 0x8A8, 175, 50, 200, 610, 400, 116, sub_02751E5C},
+    {"skin tone", 3, 2, 0x8B4, 0, 99, 0, 288, 528, 618 * 0.99f, 0, sub_027514A0},
+    {"clothing gradient", 5, 3, 0x8AC, 0x8B0, 175, 50, 200, 610, 400, 116, sub_02752028},
+    {"hair gradient", 9, 3, 0x8A4, 0x8A8, 175, 50, 200, 610, 400, 116, sub_02751A14},
 };
 const Analog* g_analog = nullptr;  // the picker up this frame (find_screen)
 float g_analog_x = -1, g_analog_y = -1;
@@ -750,8 +750,8 @@ void screen_hover(uint8_t* base) {
 }
 
 // ---- Yes / No prompts ----
-// FUN_020435B4(&cursor, buttons, left mask, right mask, ...) is the game's two-choice step (11 callers; the system
-// message's Yes / No via FUN_020E28A0, the DLC prompt, ...): cursor 0 = Yes (left), 1 = No (right), no wrap; buttons
+// FUN_0204315c(&cursor, buttons, left mask, right mask, ...) is the game's two-choice step (11 callers; the system
+// message's Yes / No via FUN_020e2300, the DLC prompt, ...): cursor 0 = Yes (left), 1 = No (right), no wrap; buttons
 // 0x10 decides, 0x20 cancels; sound 3 on a move. Hover sets the cursor (with that sound); a click on a button sets it
 // and adds "decide" to this step's buttons. Two layouts, told apart by the masks: left / right (4 / 8) - the message
 // box with Yes and No side by side (measured on the DLC prompt "Connect to get downloadable content?"); otherwise Yes
@@ -777,7 +777,7 @@ bool yes_no(ppc::Context& ctx, uint8_t* base, uint32_t cursor, bool side) {
         ctx.r[1] -= 0x40;
         ctx.r[3] = ctx.r[1] + 0x20;
         ctx.r[4] = 3;  // the cursor sound
-        sub_020BFC74(ctx, base);
+        sub_020BF75C(ctx, base);
         ctx = saved;
     };
     if (item >= 0 && moved) select();
@@ -788,9 +788,9 @@ bool yes_no(ppc::Context& ctx, uint8_t* base, uint32_t cursor, bool side) {
 }
 
 // ---- the lobby's option scrolls ----
-// FUN_0221C614(sLobby, list, buttons) steps the option list of nearly every facility (Market / Guild Store Buy / Sell,
+// FUN_0221cb24(sLobby, list, buttons) steps the option list of nearly every facility (Market / Guild Store Buy / Sell,
 // Armory and Smithy categories, Farm, Stockpile, Canteen, Arena...; found with MH3U_MENU_LEARN): list +4 cursor (s16),
-// +0xE count, +8 a bit per greyed option; up / down step the cursor (FUN_020432BC), buttons 0x10 decide (returns 1),
+// +0xE count, +8 a bit per greyed option; up / down step the cursor (FUN_02042e64), buttons 0x10 decide (returns 1),
 // 0x20 cancel. Hover sets the cursor (with the cursor sound), a click sets it and adds "decide" to this step's
 // buttons. The scroll is drawn in the same place everywhere: rows x 1280-1740, centred at y 272 + 54 * row (window
 // session screenshots, 2026-11-03); the Arena (lobby mode 29) has plaques 127 apart instead. Lists longer than
@@ -808,9 +808,9 @@ PPC_FUNC(lobby_options) {
         const bool arena = mode == 29;
         float x0 = arena ? 1290.0f : 1280.0f, x1 = arena ? 1720.0f : 1740.0f, top = arena ? 277.0f : 272.0f,
               step = arena ? 127.0f : 54.0f, half = arena ? 40.0f : 25.0f;
-        if (ctx.lr == 0x021C4B48) x0 = 1416, x1 = 1830, top = 306, step = 52;  // house: Furnishings / Gallery / DLC
-        if (ctx.lr == 0x021C4834) x0 = 202, x1 = 634, top = 274, step = 53;   // house Furnishings: Place / Remove (left)
-        if (ctx.lr == 0x021C436C || ctx.lr == 0x021C4424) x0 = 202, x1 = 634, top = 274, step = 53;  // Remove's menus
+        if (ctx.lr == 0x021C5270) x0 = 1416, x1 = 1830, top = 306, step = 52;  // house: Furnishings / Gallery / DLC
+        if (ctx.lr == 0x021C4F5C) x0 = 202, x1 = 634, top = 274, step = 53;   // house Furnishings: Place / Remove (left)
+        if (ctx.lr == 0x021C4A94 || ctx.lr == 0x021C4B4C) x0 = 202, x1 = 634, top = 274, step = 53;  // Remove's menus
         const int count = static_cast<int16_t>(ppc::ld16(base, list + 0xE)), cursor = static_cast<int16_t>(ppc::ld16(base, list + 4));
         int item = -1;
         if (x >= x0 && x <= x1)
@@ -826,7 +826,7 @@ PPC_FUNC(lobby_options) {
             ctx.r[1] -= 0x40;
             ctx.r[3] = ctx.r[1] + 0x20;
             ctx.r[4] = 3;  // the cursor sound
-            sub_020BFC74(ctx, base);
+            sub_020BF75C(ctx, base);
             ctx = saved;
         };
         static uint32_t last_list = 0;
@@ -841,7 +841,7 @@ PPC_FUNC(lobby_options) {
         while (menu_click())
             if (item >= 0) select(), ctx.r[5] |= 0x10;  // beside the rows: nothing
     }
-    sub_0221C614__orig(ctx, base);
+    sub_0221CB24__orig(ctx, base);
 }
 
 // ---- lobby lists and grids with their own cursor ----
@@ -879,7 +879,7 @@ void cursor_sound(ppc::Context& ctx, uint8_t* base) {
     ctx.r[1] -= 0x40;
     ctx.r[3] = ctx.r[1] + 0x20;
     ctx.r[4] = 3;
-    sub_020BFC74(ctx, base);
+    sub_020BF75C(ctx, base);
     ctx = saved;
 }
 
@@ -898,7 +898,7 @@ void hover_apply(ppc::Context& ctx, uint8_t* base, const Hover& h, int cursor, u
     if (h.click) menu_confirm();
 }
 
-// Market / Guild Store buy list, FUN_02217F10(sLobby): in state sLobby+0x5551 == 0, row +0x5558 of +0x5564 on the
+// Market / Guild Store buy list, FUN_02218420(sLobby): in state sLobby+0x5551 == 0, row +0x5558 of +0x5564 on the
 // page +0x555A; 8 rows at x 1190-1750, centred at y 273 + 54 * row.
 float g_shop_x = -1, g_shop_y = -1;
 
@@ -910,10 +910,10 @@ PPC_FUNC(shop_list) {
         hover_apply(ctx, base, hover_cells({1470, 273, 0, 54, 280, 25, 1, 8}, count, g_shop_x, g_shop_y), cursor,
                     lobby + 0x5558);
     }
-    sub_02217F10__orig(ctx, base);
+    sub_02218420__orig(ctx, base);
 }
 
-// Item box grid, FUN_021F1140(sLobby, box): 10 x 10 cells, column box+0xC, row box+0xE (page box+2 on L / R);
+// Item box grid, FUN_021f1730(sLobby, box): 10 x 10 cells, column box+0xC, row box+0xE (page box+2 on L / R);
 // cells centred at x 1236 + 52.2 * col, y 222 + 51.9 * row.
 float g_box_x = -1, g_box_y = -1;
 
@@ -924,10 +924,10 @@ PPC_FUNC(box_grid) {
         hover_apply(ctx, base, hover_cells({1236, 222, 52.2f, 51.9f, 25, 25, 10, 10}, 100, g_box_x, g_box_y), cursor,
                     box + 0xC, box + 0xE, 10);
     }
-    sub_021F1140__orig(ctx, base);
+    sub_021F1730__orig(ctx, base);
 }
 
-// Quest Counter quest list, FUN_021E3978(sLobby, list, ...): in state list+1 == 0 with no page turn running
+// Quest Counter quest list, FUN_021e411c(sLobby, list, ...): in state list+1 == 0 with no page turn running
 // (list+0x1AC == 0xFF), row list+0x16 of list+0x18; rows at x 1295-1755, centred at y 336 + 54 * row. Also the
 // Arena's list.
 float g_quest_x = -1, g_quest_y = -1;
@@ -940,10 +940,10 @@ PPC_FUNC(quest_list) {
         hover_apply(ctx, base, hover_cells({1525, 336, 0, 54, 230, 25, 1, 8}, count, g_quest_x, g_quest_y), cursor,
                     list + 0x16);
     }
-    sub_021E3978__orig(ctx, base);
+    sub_021E411C__orig(ctx, base);
 }
 
-// Item box Store Items (pouch list), FUN_021F1B00(sLobby, list, ...): in state list+1 == 0, row list+0x14 of 8 (page
+// Item box Store Items (pouch list), FUN_021f20f0(sLobby, list, ...): in state list+1 == 0, row list+0x14 of 8 (page
 // list+0x16 on left / right); rows at x 1416-1824, centred at y 308 + 51.84 * row.
 float g_store_x = -1, g_store_y = -1;
 
@@ -953,12 +953,12 @@ PPC_FUNC(store_list) {
         const int cursor = static_cast<int16_t>(ppc::ld16(base, list + 0x14));
         hover_apply(ctx, base, hover_cells({1620, 308, 0, 51.84f, 204, 25, 1, 8}, 8, g_store_x, g_store_y), cursor, list + 0x14);
     }
-    sub_021F1B00__orig(ctx, base);
+    sub_021F20F0__orig(ctx, base);
 }
 
-// Smithy / Armory equipment list, FUN_021CE834(sLobby): in state sLobby+0x5829 == 0 outside the skills view
+// Smithy / Armory equipment list, FUN_021cefe8(sLobby): in state sLobby+0x5829 == 0 outside the skills view
 // (+0x5C60 != 4), row +0x5944 of +0x5950 (page +0x594A on left / right). After a row change the game refreshes the
-// comparison and the model (FUN_021CCDD4(sLobby), FUN_021CDCF0(sLobby, sLobby+0x5828)) - so does the hover. Rows at
+// comparison and the model (FUN_021cd588(sLobby), FUN_021ce4a4(sLobby, sLobby+0x5828)) - so does the hover. Rows at
 // x 1190-1752, centred at y 274 + 53.8 * row.
 float g_smithy_x = -1, g_smithy_y = -1;
 
@@ -974,18 +974,18 @@ PPC_FUNC(smithy_list) {
             cursor_sound(ctx, base);
             const ppc::Context saved = ctx;
             ctx.r[3] = lobby;
-            sub_021CCDD4(ctx, base);
+            sub_021CD588(ctx, base);
             ctx.r[3] = lobby;
             ctx.r[4] = lobby + 0x5828;
-            sub_021CDCF0(ctx, base);
+            sub_021CE4A4(ctx, base);
             ctx = saved;
         }
         if (h.click) menu_confirm();
     }
-    sub_021CE834__orig(ctx, base);
+    sub_021CEFE8__orig(ctx, base);
 }
 
-// Quest Counter level plaques, FUN_021E55A8(sLobby, list): row list+0x38 of list+0x3A; plaques at x 1291-1757,
+// Quest Counter level plaques, FUN_021e5c60(sLobby, list): row list+0x38 of list+0x3A; plaques at x 1291-1757,
 // centred at y 274 + 129.6 * row (Lv 1, Lv 2, ..., Event Quests).
 float g_plaque_x = -1, g_plaque_y = -1;
 
@@ -997,10 +997,10 @@ PPC_FUNC(quest_plaques) {
         hover_apply(ctx, base, hover_cells({1524, 274, 0, 129.6f, 233, 45, 1, 6}, count, g_plaque_x, g_plaque_y), cursor,
                     list + 0x38);
     }
-    sub_021E55A8__orig(ctx, base);
+    sub_021E5C60__orig(ctx, base);
 }
 
-// House furnishing list (Place / Remove), FUN_021EF1A8(sLobby, buttons, browse only): in state sLobby+0x6EB8 == 0,
+// House furnishing list (Place / Remove), FUN_021ef798(sLobby, buttons, browse only): in state sLobby+0x6EB8 == 0,
 // row (u8) +0x6EB9 of +0x6EC4; drawn like the item box's Store Items list (x 1416-1824, y 308 + 51.84 * row). Its
 // buttons argument takes "decide" (0x10) for a click.
 float g_furn_x = -1, g_furn_y = -1;
@@ -1017,10 +1017,10 @@ PPC_FUNC(furnishing_list) {
         }
         if (h.click) ctx.r[4] |= 0x10;
     }
-    sub_021EF1A8__orig(ctx, base);
+    sub_021EF798__orig(ctx, base);
 }
 
-// Canteen ingredient list, FUN_021D8C8C(sLobby, list): row list+0x1E of list+0x28 (page list+0x2A); rows at
+// Canteen ingredient list, FUN_021d9440(sLobby, list): row list+0x1E of list+0x28 (page list+0x2A); rows at
 // x 1186-1757, centred at y 276.5 + 54 * row (found with MH3U_MENU_HUNT_LIVE: sLobby+0x83CB = list+0x1F).
 float g_canteen_x = -1, g_canteen_y = -1;
 
@@ -1032,13 +1032,13 @@ PPC_FUNC(canteen_list) {
         hover_apply(ctx, base, hover_cells({1471, 276.5f, 0, 54, 285, 25, 1, 6}, count, g_canteen_x, g_canteen_y), cursor,
                     list + 0x1E);
     }
-    sub_021D8C8C__orig(ctx, base);
+    sub_021D9440__orig(ctx, base);
 }
 
-// Quest Supply Box, FUN_02863258(player?, state): open while state+0xBAE != 0; the cursor is the byte +0x6BF of the
-// quest's supply data (FUN_02166A14(sQuest), items at +0x6C0, 4 bytes each): 8 x 5 cells, left / right 1, up / down 8
-// (FUN_025F5318 shows the item at it). Cells centred at x 1288 + 51.9 * col, y 237 + 52 * row.
-constexpr uint32_t kSQuest = 0x1031537C;
+// Quest Supply Box, FUN_02862d44(player?, state): open while state+0xBAE != 0; the cursor is the byte +0x6BF of the
+// quest's supply data (FUN_02167558(sQuest), items at +0x6C0, 4 bytes each): 8 x 5 cells, left / right 1, up / down 8
+// (FUN_025f5698 shows the item at it). Cells centred at x 1288 + 51.9 * col, y 237 + 52 * row.
+constexpr uint32_t kSQuest = 0x1031507C;
 float g_supply_x = -1, g_supply_y = -1;
 
 PPC_FUNC(supply_box) {
@@ -1046,7 +1046,7 @@ PPC_FUNC(supply_box) {
     if (state && quest && ppc::ld8(base, state + 0xBAE)) {
         const ppc::Context saved = ctx;
         ctx.r[3] = quest;
-        sub_02166A14(ctx, base);
+        sub_02167558(ctx, base);
         const uint32_t box = static_cast<uint32_t>(ctx.r[3]);
         ctx = saved;
         if (box) {
@@ -1059,10 +1059,10 @@ PPC_FUNC(supply_box) {
             if (h.click) menu_confirm();
         }
     }
-    sub_02863258__orig(ctx, base);
+    sub_02862D44__orig(ctx, base);
 }
 
-// uIDLobbyOnline's step FUN_026ACF64(widget): three choices, cursor +0x408 (copied to +0x404, drawn change at +0x40C),
+// uIDLobbyOnline's step FUN_026ad268(widget): three choices, cursor +0x408 (copied to +0x404, drawn change at +0x40C),
 // locks by +0x42C (MH3U_MENU_HUNT_LIVE found +0x404..+0x40C moving on the Ferry). Which rows of the Ferry's
 // Destination list they are is not known yet: logged with MH3U_MENU_PROBE, the pointer kept on.
 PPC_FUNC(online_choice) {
@@ -1075,10 +1075,10 @@ PPC_FUNC(online_choice) {
         std::printf("menu probe: frame %u online choice %u (+404 %u, lock %u) pointer %.0f,%.0f\n", g_frame, last,
                     ppc::ld32(base, w + 0x404), ppc::ld32(base, w + 0x42C), x, y);
     }
-    sub_026ACF64__orig(ctx, base);
+    sub_026AD268__orig(ctx, base);
 }
 
-// Farm Name List (lobby mode 22), FUN_022101F4(sLobby): in state sLobby+0x7FC0 == 1, row +0x7FC2 of +0x7FCA (page
+// Farm Name List (lobby mode 22), FUN_022106e0(sLobby): in state sLobby+0x7FC0 == 1, row +0x7FC2 of +0x7FCA (page
 // +0x7FC6 on left / right); drawn like the option scrolls (x 1280-1740, y 272 + 54 * row, 5 rows).
 float g_names_x = -1, g_names_y = -1;
 
@@ -1090,14 +1090,14 @@ PPC_FUNC(farm_names) {
         hover_apply(ctx, base, hover_cells({1510, 272, 0, 54, 230, 25, 1, 5}, count, g_names_x, g_names_y), cursor,
                     lobby + 0x7FC2);
     }
-    sub_022101F4__orig(ctx, base);
+    sub_022106E0__orig(ctx, base);
 }
 
-// Farm Felyne tabs (lobby mode 8: View Farm Status, and Cultivate's "Assign which Felyne"), FUN_021D431C(sLobby,
+// Farm Felyne tabs (lobby mode 8: View Farm Status, and Cultivate's "Assign which Felyne"), FUN_021d4ad0(sLobby,
 // view = sLobby+0x7FEC): the Felyne shown, view+0x38 of sUserData+0x5E78 (left / right, touch tabs 0x35-0x37); after
-// a change the game redraws the status panel (FUN_021D3E1C(sLobby, view)) - so does the hover. The tabs sit above the
+// a change the game redraws the status panel (FUN_021d45d0(sLobby, view)) - so does the hover. The tabs sit above the
 // panel: the first centred at 1157,217 (window session screenshot, 2026-11-03), the next ones taken as 250 apart.
-constexpr uint32_t kSUserData = 0x10315F50;
+constexpr uint32_t kSUserData = 0x10315C50;
 float g_farm_x = -1, g_farm_y = -1;
 
 PPC_FUNC(farm_stats) {
@@ -1113,14 +1113,14 @@ PPC_FUNC(farm_stats) {
             const ppc::Context saved = ctx;
             ctx.r[3] = lobby;
             ctx.r[4] = view;
-            sub_021D3E1C(ctx, base);
+            sub_021D45D0(ctx, base);
             ctx = saved;
         }
     }
-    sub_021D431C__orig(ctx, base);
+    sub_021D4AD0__orig(ctx, base);
 }
 
-// Farm Cultivate settings, FUN_021D4420(sLobby, view): in state view+1 == 1, row view+0x3A (0 Source, 1 Enrich,
+// Farm Cultivate settings, FUN_021d4bd4(sLobby, view): in state view+1 == 1, row view+0x3A (0 Source, 1 Enrich,
 // 2 Cycles, 3 OK; up / down), drawn in the status panel: Source centred at y 420, Enrich 551, Cycles 629, x 1090-1718;
 // the OK button at y 754, x 1236-1575 (window session screenshot, 2026-11-04). Source and Enrich open a list on A, OK
 // starts; Cycles changes with left / right: a click on its left arrow (x < 1400) or right arrow (x > 1660) is that
@@ -1164,10 +1164,10 @@ PPC_FUNC(farm_cultivate) {
             }
         }
     }
-    sub_021D4420__orig(ctx, base);
+    sub_021D4BD4__orig(ctx, base);
 }
 
-// Stockpile, Moga Forecast, FUN_021D2724(?, view): the day tab (Today, Tomorrow, Day After), view+0xC (s16) of
+// Stockpile, Moga Forecast, FUN_021d2ed8(?, view): the day tab (Today, Tomorrow, Day After), view+0xC (s16) of
 // view+0xE, left / right; the panel follows the tab each frame. Tabs centred at 1157 / 1411 / 1666, y 221 (window
 // session screenshot, 2026-11-04). A click on a tab picks it; B leaves, Y shows the map (unchanged).
 float g_forecast_x = -1, g_forecast_y = -1;
@@ -1182,11 +1182,11 @@ PPC_FUNC(stock_forecast) {
             cursor_sound(ctx, base);
         }
     }
-    sub_021D2724__orig(ctx, base);
+    sub_021D2ED8__orig(ctx, base);
 }
 
-// Stockpile, Resource Items, FUN_021D24BC(?, list): row list+0x8 (s16) of list+0x10 on this page (up to 8), page
-// list+0xC of list+0xE, turned with left / right (FUN_021D2240 fills the page). A list to read: a click only points.
+// Stockpile, Resource Items, FUN_021d2c70(?, list): row list+0x8 (s16) of list+0x10 on this page (up to 8), page
+// list+0xC of list+0xE, turned with left / right (FUN_021d29f4 fills the page). A list to read: a click only points.
 // Rows at x 1190-1770, centred at y 273 + 54 * row; the page arrows at 1603,195 and 1749,195 (window session
 // screenshot, 2026-11-04) - a click on one is that press.
 float g_resources_x = -1, g_resources_y = -1;
@@ -1212,10 +1212,10 @@ PPC_FUNC(stock_resources) {
             }
         }
     }
-    sub_021D24BC__orig(ctx, base);
+    sub_021D2C70__orig(ctx, base);
 }
 
-// Crop Box (Farm) and Stockpile, FUN_021EFA70(sLobby): state sLobby+0x693C. State 0: the menu at the left (Take Crops,
+// Crop Box (Farm) and Stockpile, FUN_021f0060(sLobby): state sLobby+0x693C. State 0: the menu at the left (Take Crops,
 // Send to Item Box, Exit), cursor (u8) +0x693E; with an empty box (+0x6958 == 0) only Exit. Rows at x 202-643, centred
 // at y 360 + 54 * row. States 1 / 2: the box grid, column (u8) +0x693D of +0x6974, row +0x694E of +0x6976, the cell
 // +0x694C = row * columns + column; drawn like the item box grid (x 1236 + 52.2 * col, y 222 + 52 * row).
@@ -1250,14 +1250,14 @@ PPC_FUNC(crop_box) {
             }
         }
     }
-    sub_021EFA70__orig(ctx, base);
+    sub_021F0060__orig(ctx, base);
 }
 
-// Ferry Destination list, uIDLobbyOnline state 9 = FUN_026AD984(widget): six entries (0 Moga Village, 1 / 2 Port
+// Ferry Destination list, uIDLobbyOnline state 9 = FUN_026adc88(widget): six entries (0 Moga Village, 1 / 2 Port
 // Tanzia Solo Marina / Tavern, 3 / 4 Multi Marina / Tavern, 5 Network Mode); cursor +0x408, copied to +0x404, the
 // entry last drawn as selected +0x40C. Greyed: +0x400 (where you are) 1 -> 0, 2 -> 1 and 2, 3 -> 3 and 4; without the
-// unlock flag 0x27F (FUN_0219C830(sUserData, 0x27F)) 2 and 4. The step redraws only on up / down, so the hover redraws
-// like it: FUN_026ACBB8(widget, entry +0x2E4[i], state) - the new one 1 (0x24 greyed), the old one 0 (3 greyed).
+// unlock flag 0x27F (FUN_0219d068(sUserData, 0x27F)) 2 and 4. The step redraws only on up / down, so the hover redraws
+// like it: FUN_026acebc(widget, entry +0x2E4[i], state) - the new one 1 (0x24 greyed), the old one 0 (3 greyed).
 // A greyed entry can be pointed at (as with the d-pad); deciding on it only plays the buzzer. Rows at x 1416-1795,
 // centred at y 269 (Moga Village), 429, 489, 612, 671, 758 (window session screenshot, 2026-11-03).
 float g_ferry_x = -1, g_ferry_y = -1;
@@ -1283,18 +1283,18 @@ bool ferry_choice_taken(ppc::Context& ctx, uint8_t* base, uint32_t w) {
         ctx.r[1] = frame;
         ctx.r[3] = frame + 0x10;
         ctx.r[4] = 2;  // the buzzer
-        sub_020BFC74(ctx, base);
+        sub_020BF75C(ctx, base);
         ctx = saved;
-        sub_026AD984__orig(ctx, base);
+        sub_026ADC88__orig(ctx, base);
     } else {
         ppc::st32(base, pad + 0x11C, (pressed & ~kDecide) | kCancel);
-        sub_026AD984__orig(ctx, base);
+        sub_026ADC88__orig(ctx, base);
     }
     ppc::st32(base, pad + 0x11C, pressed);
     return true;
 }
 
-// Whether the online rows are usable decides how they look, not the game's rules for what they used to be. FUN_026ACBB8(widget, entry +0x2E4[i], state):
+// Whether the online rows are usable decides how they look, not the game's rules for what they used to be. FUN_026acebc(widget, entry +0x2E4[i], state):
 // 0 plain, 1 selected, 3 greyed, 0x24 selected and greyed. Painted when the list opens and when a row's look changes.
 bool (*g_ferry_usable)(uint32_t row) = nullptr;
 constexpr uint32_t kFirstOnlineRow = 3, kOnlineRows = 3;
@@ -1317,7 +1317,7 @@ void paint_online_rows(ppc::Context& ctx, uint8_t* base, uint32_t w) {
         ctx.r[3] = w;
         ctx.r[4] = ppc::ld32(base, w + 0x2E4 + 4 * row);
         ctx.r[5] = look;
-        sub_026ACBB8(ctx, base);
+        sub_026ACEBC(ctx, base);
         ctx = keep;
     }
 }
@@ -1343,7 +1343,7 @@ PPC_FUNC(ferry_list) {
             const ppc::Context saved = ctx;
             ctx.r[3] = user;
             ctx.r[4] = 0x27F;
-            sub_0219C830(ctx, base);
+            sub_0219D068(ctx, base);
             const bool unlocked = static_cast<uint32_t>(ctx.r[3]) != 0;
             ctx = saved;
             const uint32_t where = ppc::ld32(base, w + 0x400);
@@ -1356,7 +1356,7 @@ PPC_FUNC(ferry_list) {
                 ctx.r[3] = w;
                 ctx.r[4] = ppc::ld32(base, w + 0x2E4 + 4 * static_cast<uint32_t>(i));
                 ctx.r[5] = state;
-                sub_026ACBB8(ctx, base);
+                sub_026ACEBC(ctx, base);
                 ctx = keep;
             };
             const int old = static_cast<int>(ppc::ld32(base, w + 0x40C));
@@ -1369,21 +1369,21 @@ PPC_FUNC(ferry_list) {
         }
         if (click) menu_confirm();
     }
-    sub_026AD984__orig(ctx, base);
+    sub_026ADC88__orig(ctx, base);
 }
 
-// House furnishing position picker ("Select a position"), FUN_021C3DCC(sLobby, pick): in state pick+2 == 1, the
+// House furnishing position picker ("Select a position"), FUN_021c44f4(sLobby, pick): in state pick+2 == 1, the
 // cursor pick+0xCA of pick+0xC4 free spots, pick+0xB3[i] the spots' numbers (left / right). After a change the game
-// moves the camera (FUN_021C3C5C(sLobby, pick)) and the orange marker (FUN_0222B34C(sLobbyTarget, spot)) - so does
+// moves the camera (FUN_021c4384(sLobby, pick)) and the orange marker (FUN_0222b70c(sLobbyTarget, spot)) - so does
 // the hover. The spots are markers standing in the room, drawn from fixed camera angles, so each spot shows at one
 // place on screen: kPickerSpots, measured with MH3U_MENU_PICKER_CAL=1 (the picker steps through its free spots by
 // itself, a screenshot of each). The pointer within reach of a listed spot selects it; a click decides.
-constexpr uint32_t kSLobbyTarget = 0x103A02D0;
+constexpr uint32_t kSLobbyTarget = 0x1039FFD0;
 struct PickerSpot {
     uint8_t area, room, spot;
     float x, y;
 };
-// The marker's centre on screen; the Moga Village house (area 26, room 1) has spots 0-2 (FUN_021C32C4: first 0,
+// The marker's centre on screen; the Moga Village house (area 26, room 1) has spots 0-2 (FUN_021c39ec: first 0,
 // count 3), measured 2026-11-03 (two passes, within 8 px).
 constexpr PickerSpot kPickerSpots[] = {
     {26, 1, 0, 475, 658},
@@ -1398,14 +1398,14 @@ void picker_select(ppc::Context& ctx, uint8_t* base, uint32_t lobby, uint32_t pi
     const ppc::Context saved = ctx;
     ctx.r[3] = lobby;
     ctx.r[4] = pick;
-    sub_021C3C5C(ctx, base);
+    sub_021C4384(ctx, base);
     ctx.r[3] = ppc::ld32(base, kSLobbyTarget);
     ctx.r[4] = ppc::ld8(base, pick + 0xB3 + static_cast<uint32_t>(item));
-    if (ctx.r[3]) sub_0222B34C(ctx, base);
+    if (ctx.r[3]) sub_0222B70C(ctx, base);
     ctx = saved;
 }
 
-// Place (FUN_021C3DCC) and Remove (FUN_021C4304, the occupied spots; a spot can go when pick+0xBB[i] has bit 2) step
+// Place (FUN_021c44f4) and Remove (FUN_021c4a2c, the occupied spots; a spot can go when pick+0xBB[i] has bit 2) step
 // the same struct in state 1.
 void picker_hover(ppc::Context& ctx, uint8_t* base) {
     const uint32_t lobby = static_cast<uint32_t>(ctx.r[3]), pick = static_cast<uint32_t>(ctx.r[4]);
@@ -1457,15 +1457,15 @@ void picker_hover(ppc::Context& ctx, uint8_t* base) {
 
 PPC_FUNC(furnishing_picker) {
     picker_hover(ctx, base);
-    sub_021C3DCC__orig(ctx, base);
+    sub_021C44F4__orig(ctx, base);
 }
 
 PPC_FUNC(furnishing_remove) {
     picker_hover(ctx, base);
-    sub_021C4304__orig(ctx, base);
+    sub_021C4A2C__orig(ctx, base);
 }
 
-// The lobby's stacked Yes / No, FUN_02043308(&cursor, buttons, up mask, down mask, sound): cursor u32 0 Yes, 1 No;
+// The lobby's stacked Yes / No, FUN_02042eb0(&cursor, buttons, up mask, down mask, sound): cursor u32 0 Yes, 1 No;
 // buttons 0x10 decides. Drawn right of the help box (the Farm's "Change names?"): Yes centred at 926,940, No at
 // 926,996. Hover sets the cursor, a click sets it and decides.
 float g_stack_x = -1, g_stack_y = -1;
@@ -1482,10 +1482,10 @@ PPC_FUNC(stacked_yes_no) {
         }
         if (h.click) ctx.r[4] |= 0x10;
     }
-    sub_02043308__orig(ctx, base);
+    sub_02042EB0__orig(ctx, base);
 }
 
-// Quest results, FUN_020E8DD4(?, res): reads the pad itself (sAppPad+0x6C). res+0 == 3 and res+1 == 0 is the results
+// Quest results, FUN_020ea340(?, res): reads the pad itself (sAppPad+0x6C). res+0 == 3 and res+1 == 0 is the results
 // view: res+0x20 the hunter shown (of res+0x21; left / right), A finishes, X opens a menu (res+0x2F 5, choice res+0x44)
 // for the detail views res+0x2F 1 (rows res+0x29 of 7, columns res+0x2A of res+0x23), 2 (rows res+0x29 of 8, res+0x2C)
 // and 3 (res+0x2D, res+0x2A). The pointer is kept on there (a left click is A); with MH3U_MENU_LEARN each view gets a
@@ -1505,12 +1505,12 @@ PPC_FUNC(quest_results) {
                         ppc::ld8(base, res + 0x2A), ppc::ld8(base, res + 0x23), more >> 16, (more >> 8) & 0xFF, more & 0xFF);
         last = now;
     }
-    sub_020E8DD4__orig(ctx, base);
+    sub_020EA340__orig(ctx, base);
 }
 
-// Solo quest results (rewards), sResult's FUN_02180870(?, res): state res+0x2FF4 (1 / 2 rewards, 3 ..., up to 8),
+// Solo quest results (rewards), sResult's FUN_021810a8(?, res): state res+0x2FF4 (1 / 2 rewards, 3 ..., up to 8),
 // sub-state res+2; cursors res+0x3066 of res+0x3067 (up / down; B jumps to the last), res+0x3073 / res+0x3075 (an
-// 8-row grid), Yes / No res+0x3084 (FUN_02043308). Pointer kept on (a left click is A); MH3U_MENU_LEARN screenshots
+// 8-row grid), Yes / No res+0x3084 (FUN_02042eb0). Pointer kept on (a left click is A); MH3U_MENU_LEARN screenshots
 // each state (key E1SSSS0B: state, sub), MH3U_MENU_PROBE logs the cursors - for its hover.
 PPC_FUNC(result_rewards) {
     const uint32_t res = static_cast<uint32_t>(ctx.r[4]);
@@ -1571,7 +1571,7 @@ PPC_FUNC(result_rewards) {
                 while (menu_click()) menu_confirm();
         }
     }
-    sub_02180870__orig(ctx, base);
+    sub_021810A8__orig(ctx, base);
 }
 
 // Abandon Quest's "Quit and return to the village?" (field menu sMenu+0x34 1, +0x52 5, +0x35 0): Yes and No side by
@@ -1603,15 +1603,15 @@ PPC_FUNC(two_choice) {
                     static_cast<uint32_t>(ctx.r[6]));
     g_two_choice_logged = g_frame;
     if (yes_no(ctx, base, static_cast<uint32_t>(ctx.r[3]), side)) ctx.r[4] |= 0x10;  // decide on the button clicked
-    sub_020435B4__orig(ctx, base);
+    sub_0204315C__orig(ctx, base);
 }
 
-// The message box's choice (FUN_0261C0FC(box, text, "Yes", "No", cursor value, ...), drawn from the message box
-// FUN_0261CB4C - the DLC prompt and other sMenu messages): Yes and No side by side, cursor sMenu+0x204 (the one
-// FUN_020E28A0 steps). Its input does not always go through FUN_020435B4 (the DLC prompt does not), so the pair is
+// The message box's choice (FUN_0261c47c(box, text, "Yes", "No", cursor value, ...), drawn from the message box
+// FUN_0261cecc - the DLC prompt and other sMenu messages): Yes and No side by side, cursor sMenu+0x204 (the one
+// FUN_020e2300 steps). Its input does not always go through FUN_0204315c (the DLC prompt does not), so the pair is
 // handled from here: hover sets the cursor, a click sets it and presses A.
-// The message box's Yes / No (FUN_0261C0FC(box, text, "Yes", "No", cursor value, ...), drawn every frame from the
-// message box FUN_0261CB4C - the DLC prompt and other sMenu messages; Yes and No side by side). The value drawn is
+// The message box's Yes / No (FUN_0261c47c(box, text, "Yes", "No", cursor value, ...), drawn every frame from the
+// message box FUN_0261cecc - the DLC prompt and other sMenu messages; Yes and No side by side). The value drawn is
 // sMenu+0x204, but the screen steps its own copy and stores it there each frame, so writing it does not stick (seen
 // on the DLC prompt): this one is driven like the lists - left / right taps until the drawn value is the button under
 // the pointer, then A for a click (screen_hover with g_message_value as the cursor).
@@ -1622,23 +1622,23 @@ PPC_FUNC(message_choice) {
     if (g_learn) g_callers.insert(ctx.lr);
     g_message_frame = g_frame;
     g_prompt = true;
-    sub_0261C0FC__orig(ctx, base);
+    sub_0261C47C__orig(ctx, base);
 }
 
 PPC_FUNC(card_list_step) {
     g_card = static_cast<uint32_t>(ctx.r[3]);
     g_card_frame = g_frame;
-    sub_0268E7DC__orig(ctx, base);
+    sub_0268EB7C__orig(ctx, base);
 }
 
 PPC_FUNC(make_character_step) {
     g_make = static_cast<uint32_t>(ctx.r[3]);
     g_make_frame = g_frame;
-    sub_0275412C__orig(ctx, base);
+    sub_02753CE4__orig(ctx, base);
 }
 
 PPC_FUNC(pad_update) {
-    sub_020E0CFC__orig(ctx, base);
+    sub_020E060C__orig(ctx, base);
     ++g_frame;
     if (g_learn) learn(base);
     if (g_probe) probe(base);
@@ -1770,39 +1770,39 @@ void register_menu_mouse(Pointer pointer) {
         if (fopen_s(&g_snap, v, "wb") != 0) g_snap = nullptr;
         std::free(v);
     }
-    ppc::set_override(0x020E0CFC, &pad_update);
-    ppc::set_override(0x0221A430, &menu_directions);
-    ppc::set_override(0x0275BD84, &option_page);
-    ppc::set_override(0x020435B4, &two_choice);
-    ppc::set_override(0x0261C0FC, &message_choice);
-    ppc::set_override(0x0275412C, &make_character_step);
-    ppc::set_override(0x0268E7DC, &card_list_step);
-    ppc::set_override(0x0221C614, &lobby_options);
-    ppc::set_override(0x02217F10, &shop_list);
-    ppc::set_override(0x021F1140, &box_grid);
-    ppc::set_override(0x021E3978, &quest_list);
-    ppc::set_override(0x021F1B00, &store_list);
-    ppc::set_override(0x021CE834, &smithy_list);
-    ppc::set_override(0x021E55A8, &quest_plaques);
-    ppc::set_override(0x021EF1A8, &furnishing_list);
-    ppc::set_override(0x021D8C8C, &canteen_list);
-    ppc::set_override(0x02863258, &supply_box);
-    ppc::set_override(0x026ACF64, &online_choice);
-    ppc::set_override(0x022101F4, &farm_names);
-    ppc::set_override(0x021D431C, &farm_stats);
-    ppc::set_override(0x02043308, &stacked_yes_no);
-    ppc::set_override(0x021D4420, &farm_cultivate);
-    ppc::set_override(0x021D2724, &stock_forecast);
-    ppc::set_override(0x021D24BC, &stock_resources);    ppc::set_override(0x021EFA70, &crop_box);
-    ppc::set_override(0x026AD984, &ferry_list);
-    ppc::set_override(0x021C3DCC, &furnishing_picker);
-    ppc::set_override(0x021C4304, &furnishing_remove);
-    ppc::set_override(0x020E8DD4, &quest_results);
-    ppc::set_override(0x02180870, &result_rewards);
+    ppc::set_override(0x020E060C, &pad_update);
+    ppc::set_override(0x0221A940, &menu_directions);
+    ppc::set_override(0x0275B908, &option_page);
+    ppc::set_override(0x0204315C, &two_choice);
+    ppc::set_override(0x0261C47C, &message_choice);
+    ppc::set_override(0x02753CE4, &make_character_step);
+    ppc::set_override(0x0268EB7C, &card_list_step);
+    ppc::set_override(0x0221CB24, &lobby_options);
+    ppc::set_override(0x02218420, &shop_list);
+    ppc::set_override(0x021F1730, &box_grid);
+    ppc::set_override(0x021E411C, &quest_list);
+    ppc::set_override(0x021F20F0, &store_list);
+    ppc::set_override(0x021CEFE8, &smithy_list);
+    ppc::set_override(0x021E5C60, &quest_plaques);
+    ppc::set_override(0x021EF798, &furnishing_list);
+    ppc::set_override(0x021D9440, &canteen_list);
+    ppc::set_override(0x02862D44, &supply_box);
+    ppc::set_override(0x026AD268, &online_choice);
+    ppc::set_override(0x022106E0, &farm_names);
+    ppc::set_override(0x021D4AD0, &farm_stats);
+    ppc::set_override(0x02042EB0, &stacked_yes_no);
+    ppc::set_override(0x021D4BD4, &farm_cultivate);
+    ppc::set_override(0x021D2ED8, &stock_forecast);
+    ppc::set_override(0x021D2C70, &stock_resources);    ppc::set_override(0x021F0060, &crop_box);
+    ppc::set_override(0x026ADC88, &ferry_list);
+    ppc::set_override(0x021C44F4, &furnishing_picker);
+    ppc::set_override(0x021C4A2C, &furnishing_remove);
+    ppc::set_override(0x020EA340, &quest_results);
+    ppc::set_override(0x021810A8, &result_rewards);
     if (g_learn) {
-        ppc::set_override(0x020431F8, &learn_cursor_a);
-        ppc::set_override(0x020432BC, &learn_cursor_b);
-        ppc::set_override(0x020432C8, &learn_cursor_c);
+        ppc::set_override(0x02042DA0, &learn_cursor_a);
+        ppc::set_override(0x02042E64, &learn_cursor_b);
+        ppc::set_override(0x02042E70, &learn_cursor_c);
     }
 }
 

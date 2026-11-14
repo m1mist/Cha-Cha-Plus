@@ -5,15 +5,15 @@
 // Replaces (all called from the uGameCamera update, r3 = the uGameCamera; status: wip - read in Ghidra, the steps
 // below are the original ones times the frame time; 30 FPS gives the original results exactly. Not yet seen in game:
 // the village camera is fixed and runs none of this, so it needs a field / quest run, MH3U_CAMERA_LOG=1 shows it):
-//   FUN_0227FFC0 cameraEase?      (cam, target, current, shift) -> (s16)(target - current) >> shift, the step that
+//   FUN_0227ff98 cameraEase?      (cam, target, current, shift) -> (s16)(target - current) >> shift, the step that
 //                                 moves the camera's angles (block +0x98 / +0x9C / +0xA4) toward their targets
 //                                 (+0x90 / +0x94 / +0xA0) once a frame (shift 2, 5)
-//   FUN_02286DE8 cameraAutoTurn?  (f1-f3 curve, cam, angle) -> s16 step that swings the camera behind the hunter
-//   FUN_02286F18 cameraTurnInput? (cam, block, player): while camera left / right is held (player pad +0x1C8 bits 6
+//   FUN_02286dc0 cameraAutoTurn?  (f1-f3 curve, cam, angle) -> s16 step that swings the camera behind the hunter
+//   FUN_02286ef0 cameraTurnInput? (cam, block, player): while camera left / right is held (player pad +0x1C8 bits 6
 //                                 / 8, bit 9 = camera control on) the target yaw +0x94 moves by
 //                                 K * ramp / max a frame, K = 0x40B (0x34B with +0xC0, 0x2EB with +0x129 == 1),
 //                                 ramp +0xE4 counting the frame time up to max (5, 10 under water)
-//   FUN_02286890 cameraPitchInput? (cam, block, player): under water (pad +0x3D == 3) camera up / down (bits 2 / 4,
+//   FUN_02286868 cameraPitchInput? (cam, block, player): under water (pad +0x3D == 3) camera up / down (bits 2 / 4,
 //                                 swapped by the inverted-camera bit 2 of +0x697) move the target pitch +0x90 by
 //                                 K * ramp / 12 a frame, K = 0x230 (0x170 with +0xC0 == 0 and +0x129 == 1), ramp
 //                                 +0xD8, clamped to +-0x3E94; +0x110 = 1, +0x114 = 30.0 mark that path
@@ -25,8 +25,8 @@
 // turns the camera from digital pad bits, not from how far the stick is pushed, so the setting scales the turn steps
 // themselves (another factor next to the frame time): the yaw step of cameraTurnInput, the under-water pitch step of
 // cameraPitchInput and, on land, the ease of the camera's tilt. On land up / down only step a tilt level (block
-// +0xA8, 0..5, in cameraPitchInput), FUN_0228984C sets the tilt target +0xA0 from it and eases +0xA4 toward it with
-// shift 5 (call sites lr 0x02289EE4 / 0x02289F64 / 0x02289FE4); that ease is the vertical movement seen on land.
+// +0xA8, 0..5, in cameraPitchInput), FUN_02289824 sets the tilt target +0xA0 from it and eases +0xA4 toward it with
+// shift 5 (call sites lr 0x02289EBC / 0x02289F3C / 0x02289FBC); that ease is the vertical movement seen on land.
 // (0.2.0 scaled the right stick instead: below the game's stick-to-button threshold the camera stopped - vertical
 // at 50%, horizontal at 30% - and above it the turn speed did not change.)
 #include "camera_speed.h"
@@ -51,7 +51,7 @@ bool g_log = false;                     // MH3U_CAMERA_LOG=1
 std::atomic<float> g_speed{1.0f};       // camera speed setting, 1.0 = the game's own
 
 float speed() { return g_speed.load(std::memory_order_relaxed); }
-bool is_tilt_ease(uint32_t lr) { return lr == 0x02289EE4 || lr == 0x02289F64 || lr == 0x02289FE4; }
+bool is_tilt_ease(uint32_t lr) { return lr == 0x02289EBC || lr == 0x02289F3C || lr == 0x02289FBC; }
 
 float frame_time(const uint8_t* base, uint32_t cam) {
     const float t = ppc::ldf32(base, cam + kFrameTime);
@@ -95,14 +95,14 @@ PPC_FUNC(camera_ease) {
 
 PPC_FUNC(camera_auto_turn) {
     const float t = frame_time(base, ctx.r[3]);
-    sub_02286DE8__orig(ctx, base);
+    sub_02286DC0__orig(ctx, base);
     if (!same(t)) ctx.r[3] = static_cast<uint32_t>(static_cast<int16_t>(std::lround(static_cast<int16_t>(ctx.r[3]) * t)));
 }
 
 PPC_FUNC(camera_turn_input) {
     const uint32_t cam = ctx.r[3], block = ctx.r[4], player = ctx.r[5];
     const uint32_t before = ppc::ld32(base, block + 0x94);
-    sub_02286F18__orig(ctx, base);
+    sub_02286EF0__orig(ctx, base);
     const float t = frame_time(base, cam) * speed();
     ++g_turns;
     if (same(t) || !input(base, player, 9) || !(input(base, player, 6) || input(base, player, 8))) return;
@@ -124,7 +124,7 @@ PPC_FUNC(camera_turn_input) {
 PPC_FUNC(camera_pitch_input) {
     const uint32_t cam = ctx.r[3], block = ctx.r[4], player = ctx.r[5];
     const uint32_t before = ppc::ld32(base, block + 0x90);
-    sub_02286890__orig(ctx, base);
+    sub_02286868__orig(ctx, base);
     const float t = frame_time(base, cam) * speed();
     const uint32_t pad = ppc::ld32(base, player + kPad);
     if (same(t) || base[pad + 0x3D] != 3 || base[block + 0x110] != 1 || ppc::ldf32(base, block + 0x114) != 30.0f)
@@ -157,10 +157,10 @@ void register_camera_speed() {
     size_t len = 0;
     g_log = _dupenv_s(&e, &len, "MH3U_CAMERA_LOG") == 0 && e && std::string(e) == "1";
     std::free(e);
-    ppc::set_override(0x0227FFC0, &camera_ease);
-    ppc::set_override(0x02286DE8, &camera_auto_turn);
-    ppc::set_override(0x02286F18, &camera_turn_input);
-    ppc::set_override(0x02286890, &camera_pitch_input);
+    ppc::set_override(0x0227FF98, &camera_ease);
+    ppc::set_override(0x02286DC0, &camera_auto_turn);
+    ppc::set_override(0x02286EF0, &camera_turn_input);
+    ppc::set_override(0x02286868, &camera_pitch_input);
 }
 
 }  // namespace mh3u::game

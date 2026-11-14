@@ -24,8 +24,8 @@ import ghidra.program.model.symbol.Reference;
 import ghidra.program.util.SymbolicPropogator;
 
 public class RecoverDTI extends GhidraScript {
-    static final long MTDTI_CTOR = 0x02d63178L;
-    static final long DTI_ROOT = 0x103d5b70L;   // ctor's default parent when none is passed
+    static final long MTDTI_CTOR = 0x02d62ad0L;
+    static final long DTI_ROOT = 0x103d5830L;   // ctor's default parent when none is passed
 
     private final Map<Address, SymbolicPropogator> propsByStart = new HashMap<>();
     private MemoryBlock text;

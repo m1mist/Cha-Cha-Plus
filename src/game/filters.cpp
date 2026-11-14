@@ -1,7 +1,7 @@
 // Bloom and depth of field on/off (settings bloom, depth_of_field).
 //
-// Replaces: uBloomFilter::vf11 @ 0x02A7830C (inherited by uAppBloomFilter), uDOFFilter::vf11 @ 0x02A8504C and
-// uBokehFilter::vf11 @ 0x02A79F90. Status: wip - verified by frame comparison in Moga Village (bloom/DOF passes gone,
+// Replaces: uBloomFilter::vf11 @ 0x02A77C44 (inherited by uAppBloomFilter), uDOFFilter::vf11 @ 0x02A84984 and
+// uBokehFilter::vf11 @ 0x02A798C8. Status: wip - verified by frame comparison in Moga Village (bloom/DOF passes gone,
 // rest of the frame unchanged).
 //
 // MT Framework's screen effects are units (uFilter : cUnit) with their draw in vtable slot 11 (uFilter::vf11 is an
@@ -20,13 +20,13 @@ namespace {
 std::atomic<bool> g_bloom{true}, g_dof{true};  // the launcher switches them from the host main thread
 
 PPC_FUNC(bloom_draw) {
-    if (g_bloom) sub_02A7830C__orig(ctx, base);
+    if (g_bloom) sub_02A77C44__orig(ctx, base);
 }
 PPC_FUNC(dof_draw) {
-    if (g_dof) sub_02A8504C__orig(ctx, base);
+    if (g_dof) sub_02A84984__orig(ctx, base);
 }
 PPC_FUNC(bokeh_draw) {
-    if (g_dof) sub_02A79F90__orig(ctx, base);
+    if (g_dof) sub_02A798C8__orig(ctx, base);
 }
 
 }  // namespace
@@ -38,9 +38,9 @@ void set_filters(bool bloom, bool depth_of_field) {
 
 void register_filters(bool bloom, bool depth_of_field) {
     set_filters(bloom, depth_of_field);
-    ppc::set_override(0x02A7830C, &bloom_draw);
-    ppc::set_override(0x02A8504C, &dof_draw);
-    ppc::set_override(0x02A79F90, &bokeh_draw);
+    ppc::set_override(0x02A77C44, &bloom_draw);
+    ppc::set_override(0x02A84984, &dof_draw);
+    ppc::set_override(0x02A798C8, &bokeh_draw);
 }
 
 }  // namespace mh3u::game

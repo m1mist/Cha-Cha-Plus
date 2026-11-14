@@ -2,8 +2,8 @@
 //   1. load + relocate the executable (recomp loader) and map its sections into guest memory
 //   2. set up the import area (data imports), heaps, the main thread's stack and guest OSThread
 //   3. register the HLE Cafe OS functions
-//   4. call the RPX entry point __rpx_start(argc, argv): it runs the static constructor table (0x101632C4, via
-//      0x02E842EC) and then main(); exit() unwinds back here as GuestExit.
+//   4. call the RPX entry point __rpx_start(argc, argv): it runs the static constructor table (0x10163084, via
+//      0x02E83C44) and then main(); exit() unwinds back here as GuestExit.
 //   The host main thread owns the SDL window and pumps its events; the guest boots on its own host thread.
 // Usage: mh3u [--game <dump>]... [--install <dump>...] [--data-dir <dir>] [--play] [--headless] [--console]
 //   Starts in the launcher (runtime/boot/setup.cpp); --play goes straight into the game.
@@ -73,7 +73,7 @@ using namespace mh3u;
 
 namespace {
 
-constexpr uint32_t kEntry = 0x02E84370;           // __rpx_start (ELF e_entry)
+constexpr uint32_t kEntry = 0x02E83CC8;           // __rpx_start (ELF e_entry)
 constexpr uint32_t kMainStackSize = 0x00100000;   // 1 MB
 
 std::map<std::string, uint64_t> g_import_calls;
@@ -581,7 +581,7 @@ int main(int argc, char** argv) {
     ppc::Context ctx{};
     const uint32_t stack_top = kStackBase + kMainStackSize;
     ctx.r[1] = stack_top - 0x20;
-    const char* name = "MH3G_Cafe_US.rpx";
+    const char* name = "MH3G_Cafe.rpx";
     uint32_t name_addr = mem.alloc_hle(static_cast<uint32_t>(std::strlen(name) + 1));
     std::memcpy(mem.base() + name_addr, name, std::strlen(name) + 1);
     uint32_t argv_addr = mem.alloc_hle(8, 4);

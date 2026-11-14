@@ -232,8 +232,8 @@ input::PadState shared_read(int who) {
 }
 
 // Pending callbacks run from the game's next VPADRead/KPADReadEx, on its thread. The game polls KPAD only after the
-// connect callback reported channel 0 (sPad::WiiPad, connect callback 0x02BC9DCC), and reads Pro Controller
-// buttons only once its extension callback (0x02BC9CD4) saw type 31 (URCC), which the connect callback registers.
+// connect callback reported channel 0 (sPad::WiiPad, connect callback 0x02BC9714), and reads Pro Controller
+// buttons only once its extension callback (0x02BC961C) saw type 31 (URCC), which the connect callback registers.
 void deliver_callbacks(const ppc::Context& ctx, uint8_t* base) {
     while (!g_pending.empty()) {
         const PendingCallback cb = g_pending.front();

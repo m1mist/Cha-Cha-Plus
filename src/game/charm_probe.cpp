@@ -2,7 +2,7 @@
 // 2026-11-11 "Charm tables"). Off unless MH3U_CHARM_PROBE=<frame> is set.
 //
 // At that frame (counted in GX2SwapScanBuffers calls, on the game's thread) it rolls one talisman with the game's
-// generator 0x0217F63C (makeTalisman?) from every state of RNG slot 1 (sGame+0x42) for every charm 0x25-0x28, through
+// generator 0x0217FE74 (makeTalisman?) from every state of RNG slot 1 (sGame+0x42) for every charm 0x25-0x28, through
 // the hook point, so a loaded Charm Table Fix takes part. It reports per table (the cycle of
 // x -> (x || 1) * 176 mod 65363 the start state lies on) how many different talismans came out, how many draws a roll
 // takes, and whether slot 1 ended on the start state's cycle. Slot 1 is put back afterwards. Status: wip (research).
@@ -21,7 +21,7 @@
 namespace mh3u::game {
 namespace {
 
-constexpr uint32_t kGamePtr = 0x101FDB9C, kSlot1 = 0x42, kModulus = 65363;
+constexpr uint32_t kGamePtr = 0x101FD9CC, kSlot1 = 0x42, kModulus = 65363;
 ppc::GuestFunction g_swap = nullptr;
 uint32_t g_frame = 0, g_at = 0;
 
@@ -59,7 +59,7 @@ void run(ppc::Context& ctx, uint8_t* base) {
             ctx.r[3] = 0;
             ctx.r[4] = out;
             ctx.r[5] = charm;
-            sub_0217F63C(ctx, base);
+            sub_0217FE74(ctx, base);
             uint64_t key = static_cast<uint64_t>(charm) << 56;
             for (uint32_t i = 1; i < 8; ++i) key |= static_cast<uint64_t>(ppc::ld8(base, out + i)) << (8 * (7 - i));
             per_cycle[cycle[s]].insert(key);

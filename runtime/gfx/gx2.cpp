@@ -286,8 +286,8 @@ GX2_FUNC(GX2DrawDone) {
     ++g_timestamp;
     ret(ctx, 1);
 }
-// The game waits for a vsync in sLtRender::present (0x02BBF9D0, while renderer flags 2 and 4 are set and a frame is
-// still queued: cutscenes) and in sApp::presentStandalone (0x02BC1E34). With our own frame pacing (MH3U_FPS other than
+// The game waits for a vsync in sLtRender::present (0x02BBF318, while renderer flags 2 and 4 are set and a frame is
+// still queued: cutscenes) and in sApp::presentStandalone (0x02BC177C). With our own frame pacing (MH3U_FPS other than
 // "game") those waits would hold frames back on top of it, so they return at once; game pacing keeps the 60 Hz tick.
 GX2_FUNC(GX2WaitForVsync) {
     if (g_target_fps != 0) return;
@@ -351,7 +351,7 @@ SurfaceLevel level0(const Surf& s, uint32_t slice = 0) {
 // Tiling apertures: a linear CPU view of a tiled surface (rows of `pitch` elements, as the game sizes it with
 // GX2GetSurfaceMipPitch). The hardware detiles on the fly; here the level is detiled into a buffer in guest memory
 // at Allocate and written back (retiled) at Free, so writes through the view reach the surface. MH3U reads its
-// character-creation colour gradients this way (uIDMakeAppearance 0x0274A9F0 via 0x02957070): with the raw tiled
+// character-creation colour gradients this way (uIDMakeAppearance 0x0274A5A8 via 0x029569A8): with the raw tiled
 // image instead, the chosen skin / hair colour came out wrong. Only level 0 is detiled (the game asks for no other).
 struct Aperture {
     uint32_t buffer = 0, capacity = 0, image = 0, row_bytes = 0;

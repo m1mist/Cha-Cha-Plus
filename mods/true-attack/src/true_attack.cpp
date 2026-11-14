@@ -2,9 +2,9 @@
 // A Cha-Cha plugin (include/chacha_plugin.h, docs/modding.md).
 //
 // How the game does it (docs/research-log.md, 2026-11-04 "True attack"): weapon data holds the true attack; for
-// display only, FUN_02045108(item, raw) returns raw x table[weapon class] / 100 (u16), the table at 0x1017C13C being
-// u32 x100: 480 140 520 230 148 130 130 330 460 230 120 140 460 170 (index from FUN_02158CC0 by the item's kind;
-// kind 0xB with FUN_020450C0 uses the last entry). Every live caller is menu or text code (Smithy, equipment, item
+// display only, FUN_02044cb0(item, raw) returns raw x table[weapon class] / 100 (u16), the table at 0x1017BEFC being
+// u32 x100: 480 140 520 230 148 130 130 330 460 230 120 140 460 170 (index from FUN_02159d08 by the item's kind;
+// kind 0xB with FUN_02044c68 uses the last entry). Every live caller is menu or text code (Smithy, equipment, item
 // lists, a sprintf); damage reads the true attack directly. So returning the raw value changes the number shown and
 // nothing else. A result of 0 (no weapon class) is left alone.
 #include "chacha_plugin.h"
@@ -16,8 +16,8 @@
 
 namespace {
 
-constexpr uint32_t kDisplayAttack = 0x02045108;
-constexpr const char* kGameSha1 = "d97aabfc5a45362f88dfacb09f23c6dcae6faac2";  // MH3U US v32
+constexpr uint32_t kDisplayAttack = 0x02044CB0;
+constexpr const char* kGameSha1 = "cb908d6807891f4edb5b00fdf2a1d5688ee0b935";  // MH3G HD JP v96
 
 const ChaChaApi* api = nullptr;
 ChaChaPlugin* self = nullptr;

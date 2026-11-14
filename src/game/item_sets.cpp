@@ -2,22 +2,22 @@
 // sub-list "Register Item Set" (the pouch becomes the set) / "Load Item Set" (the pouch goes into the box, then the
 // set's items come out of the box into the same pouch slots).
 //
-// Replaces: FUN_021F0E7C sLobby::boxMenuStep? (one step of the box menu's option list; called only by the box state
-// machine FUN_02201508, state 2), and wraps the menu's drawing - FUN_026A6B80 (option rows) and FUN_02687D38 (screen,
-// sub-list pop-up) and cGUIInstAnimation::updateTransforms? 0x02AE1E40 - so Item Sets is drawn in row 3, in the tan
+// Replaces: FUN_021f146c sLobby::boxMenuStep? (one step of the box menu's option list; called only by the box state
+// machine FUN_02201af8, state 2), and wraps the menu's drawing - FUN_026a6e84 (option rows) and FUN_026880d8 (screen,
+// sub-list pop-up) and cGUIInstAnimation::updateTransforms? 0x02AE1778 - so Item Sets is drawn in row 3, in the tan
 // upper part, with the separator and the scroll's lower part one row down. Status: wip - read in Ghidra
 // (docs/research-log.md, "Item box menu"); seen working in a window (2026-10-27): register / load, row 3, the set list.
 //
 // The box menu (state at sLobby+0x6F10): +0x6F16 option, +0x6F18 sub-list cursor, +0x6F1A level (0 options,
 // 1 sub-list), +0x6F1C option count, +0x6F1E sub-list count. The step returns 1 when a sub-list entry is chosen,
-// 2 when the menu is left. Per-option u16 tables: sub-list counts 0x10170F30, label bases (Shop text) 0x10170F40, help
-// bases (Help text) 0x10170F50. The game has 6 options; slot 6 of each table exists and is used by nothing, and the
+// 2 when the menu is left. Per-option u16 tables: sub-list counts 0x10170CF0, label bases (Shop text) 0x10170D00, help
+// bases (Help text) 0x10170D10. The game has 6 options; slot 6 of each table exists and is used by nothing, and the
 // state machine does nothing (a sound) for option 6 - so: count 7, slot 6 = 2 entries at Shop 386/387 ("DUMMY"),
 // labels Shop 395 / help 180-182 (also "DUMMY") replaced with ours, and a chosen option-6 entry handled here.
 //
 // Pouch / box (sUserData, hunter = sUserData+0x38): u16 item id + u16 count per slot. Blademaster pouch hunter+0xA8
-// (24 slots), gunner pouch hunter+0x108 (32), FUN_02199E48(sUserData, hunter) != 0 when the gunner pouch is in use;
-// box sUserData+0x1C0, FUN_0219880C(sUserData, hunter) slots. Sets are kept per hunter name and pouch in
+// (24 slots), gunner pouch hunter+0x108 (32), FUN_0219a680(sUserData, hunter) != 0 when the gunner pouch is in use;
+// box sUserData+0x1C0, FUN_02199044(sUserData, hunter) slots. Sets are kept per hunter name and pouch in
 // <data>/save/80000001/cha-cha-item-sets.ini, 5 sets each; choosing Register / Load lists them (with a preview of the
 // highlighted set's items in the help box).
 #include "item_sets.h"
@@ -44,8 +44,8 @@
 namespace mh3u::game {
 namespace {
 
-constexpr uint32_t kSUserData = 0x10315F50;
-constexpr uint32_t kCounts = 0x10170F30, kLabels = 0x10170F40, kHelp = 0x10170F50;
+constexpr uint32_t kSUserData = 0x10315C50;
+constexpr uint32_t kCounts = 0x10170CF0, kLabels = 0x10170D00, kHelp = 0x10170D10;
 constexpr uint32_t kOption = 6;              // the new option's index
 constexpr uint16_t kLabelBase = 386, kHelpBase = 180;
 constexpr int kMaxStack = 99;                // box stacks
@@ -62,16 +62,16 @@ struct Slot {
     uint16_t id = 0, count = 0;
 };
 
-// The game's menu sounds (FUN_020BFC74(handle, id), as the box menu plays them): 0 a sub-list opens, 1 back, 2 not
-// possible, 3 the cursor moved (FUN_020432C8, the menus' up / down step), 5 a choice made, 6 a page turned (Store
-// Items' paging, FUN_020431F8). The handle is an 8-byte object on the guest stack.
+// The game's menu sounds (FUN_020bf75c(handle, id), as the box menu plays them): 0 a sub-list opens, 1 back, 2 not
+// possible, 3 the cursor moved (FUN_02042e70, the menus' up / down step), 5 a choice made, 6 a page turned (Store
+// Items' paging, FUN_02042da0). The handle is an 8-byte object on the guest stack.
 enum Sound : uint32_t { kOpen = 0, kBack = 1, kError = 2, kMove = 3, kChoose = 5, kPage = 6 };
 void play(ppc::Context& ctx, uint8_t* base, Sound id) {
     const ppc::Context saved = ctx;
     ctx.r[1] -= 0x40;
     ctx.r[3] = ctx.r[1] + 0x20;
     ctx.r[4] = id;
-    sub_020BFC74(ctx, base);
+    sub_020BF75C(ctx, base);
     ctx = saved;
 }
 
@@ -103,7 +103,7 @@ Pouch pouch(ppc::Context& ctx, uint8_t* base) {
     const uint32_t ud = ppc::ld32(base, kSUserData);
     if (!ud) return p;
     p.hunter = ud + 0x38;
-    p.gunner = call(ctx, base, sub_02199E48, ud, p.hunter) != 0;
+    p.gunner = call(ctx, base, sub_0219A680, ud, p.hunter) != 0;
     p.addr = p.hunter + (p.gunner ? 0x108 : 0xA8);
     p.slots = p.gunner ? 32 : 24;
     std::string name;  // the hunter's name (hunter data +3, as in the save file)
@@ -151,7 +151,7 @@ std::string set_key(const Pouch& p, int set) { return p.key + "#" + std::to_stri
 
 // an item's name, as the game shows it (text group 4, index = item id)
 std::string item_name(ppc::Context& ctx, uint8_t* base, uint16_t id) {
-    const uint32_t s = call(ctx, base, sub_0205AD00, 4, id);
+    const uint32_t s = call(ctx, base, sub_0205AD90, 4, id);
     std::string out;
     for (uint32_t a = s; a && out.size() < 64; ++a) {
         const uint8_t c = ppc::ld8(base, a);
@@ -237,7 +237,7 @@ Loaded simulate_load(std::vector<Slot> pch, std::vector<Slot> b, const std::vect
 }
 
 uint32_t box_slot_count(ppc::Context& ctx, uint8_t* base, const Pouch& p) {
-    return std::min<uint32_t>(call(ctx, base, sub_0219880C, ppc::ld32(base, kSUserData), p.hunter), 2000);
+    return std::min<uint32_t>(call(ctx, base, sub_02199044, ppc::ld32(base, kSUserData), p.hunter), 2000);
 }
 
 void load_set(ppc::Context& ctx, uint8_t* base, int set) {
@@ -269,7 +269,7 @@ Pouch g_preview_pouch;
 int g_shown_set = -1;          // the set the pouch window shows
 int g_page = 0;                // its page of 8 slots (left / right in the set list)
 constexpr uint16_t kSetLabelBase = 380;
-constexpr uint32_t kHelpCaller = 0x026508C4;  // the box menu's help lookup (FUN_02650890)
+constexpr uint32_t kHelpCaller = 0x02650C90;  // the box menu's help lookup (FUN_02650c5c)
 
 void menu_texts() {  // the Register / Load sub-list
     set_text(0x2F, kHelpBase + 1, "Choose a set to register the items\r\nin your pouch as.", kHelpCaller);
@@ -355,7 +355,7 @@ PPC_FUNC(box_menu_step) {
         ppc::st16(base, kHelp + kOption * 2, kHelpBase);
         g_patched = true;
     }
-    // the small box (lobby+0x6F12 set: 3 options, Store / Remove / Combine, the 3-row scroll; FUN_02201508 leaves the
+    // the small box (lobby+0x6F12 set: 3 options, Store / Remove / Combine, the 3-row scroll; FUN_02201af8 leaves the
     // camera alone for it) gets the same 7 options with only 0-2 and Item Sets reachable and drawn
     const bool small = ppc::ld8(base, lobby + 0x6F12) != 0;
     const uint16_t normal = small ? 3 : 6, count = ppc::ld16(base, lobby + 0x6F1C);
@@ -365,7 +365,7 @@ PPC_FUNC(box_menu_step) {
         if (ppc::ld16(base, lobby + 0x6F16) >= normal) ppc::st16(base, lobby + 0x6F16, normal - 1);
     }
     const uint16_t before = ppc::ld16(base, lobby + 0x6F16), level = ppc::ld16(base, lobby + 0x6F1A);
-    sub_021F0E7C__orig(ctx, base);
+    sub_021F146C__orig(ctx, base);
     // up / down among the options follow the order on screen (Item Sets in row 3, under Combine/Manage Items)
     const uint16_t after = ppc::ld16(base, lobby + 0x6F16);
     if (on && level == 0 && ppc::ld16(base, lobby + 0x6F1A) == 0 && ppc::ld16(base, lobby + 0x6F1C) == 7 && after != before &&
@@ -376,10 +376,10 @@ PPC_FUNC(box_menu_step) {
     }
     const uint16_t level_now = ppc::ld16(base, lobby + 0x6F1A);
     if (g_pick != Pick::None) {
-        // left / right (menu direction bits from FUN_0221A430, with key repeat: 1 up, 2 down, 4 left, 8 right - seen
+        // left / right (menu direction bits from FUN_0221a940, with key repeat: 1 up, 2 down, 4 left, 8 right - seen
         // in a window) turn the pouch window's pages, as Store Items turns the box's
         if (level == 1) {
-            const uint32_t dirs = call(ctx, base, sub_0221A430, lobby, 0);
+            const uint32_t dirs = call(ctx, base, sub_0221A940, lobby, 0);
             const int pages = static_cast<int>((g_preview_pouch.slots + 7) / 8);
             if (pages > 1 && (dirs & 0xC)) {
                 g_page = (g_page + ((dirs & 8) ? 1 : pages - 1)) % pages;
@@ -589,7 +589,7 @@ void find_moved(uint8_t* base, uint32_t maki) {
         const float y = ppc::ldf32(base, obj + 0x84);
         g_moved.push_back({inst, root, obj, vt, y, y});
     };
-    constexpr uint32_t kNull = 0x100A7CB0, kTexture = 0x100A7F30;  // cGUIObjNull, cGUIObjTexture vtables
+    constexpr uint32_t kNull = 0x100A7A70, kTexture = 0x100A7CF0;  // cGUIObjNull, cGUIObjTexture vtables
     if (const uint32_t scroll = find_instance(base, maki, 428)) {
         const uint32_t root = ppc::ld32(base, scroll + 0xFC);
         add(scroll, root, nth_child(base, root, 1), kTexture);  // the tan panel
@@ -602,7 +602,7 @@ void find_moved(uint8_t* base, uint32_t maki) {
     }
 }
 
-// cGUIInstAnimation::updateTransforms? (0x02AE1E40, r3 = the instance; vf13 of every animated instance): the moved
+// cGUIInstAnimation::updateTransforms? (0x02AE1778, r3 = the instance; vf13 of every animated instance): the moved
 // objects get their PosY before the instance redoes its objects' transforms (object root +0x8C bit 1 asks for that).
 PPC_FUNC(update_transforms) {
     const uint32_t inst = ctx.r[3];
@@ -622,10 +622,10 @@ PPC_FUNC(update_transforms) {
         std::erase_if(g_moved, [&](const Moved& m) { return m.inst == inst; });
         if (g_moved.empty()) g_moved_widget = 0;
     }
-    sub_02AE1E40__orig(ctx, base);
+    sub_02AE1778__orig(ctx, base);
 }
 
-// The option rows (uIDLobbyMaki::drawBoxMenuOptions? 0x026A6B80, r3 = the menu widget, r4 = the state): option i is
+// The option rows (uIDLobbyMaki::drawBoxMenuOptions? 0x026A6E84, r3 = the menu widget, r4 = the state): option i is
 // drawn in row slot i (i < 3) or i + 1 from the widget's arrays. With 7 options the highlight frame and text arrays
 // are rearranged for the call so that options 3-5 land in slots 5-7 and Item Sets (6) in slot 3; afterwards the
 // plates of slots 3 and 7 are shown (the game's 6-option layout leaves them bare) and slot 4's hidden (the gap). In
@@ -654,7 +654,7 @@ PPC_FUNC(draw_options) {
         rearrange(frames, saved_frames);
         rearrange(texts, saved_texts);
     }
-    sub_026A6B80__orig(ctx, base);
+    sub_026A6E84__orig(ctx, base);
     box_hover(ctx, base, maki, state);
     if (!ours) return;
     restore(frames, saved_frames);
@@ -665,11 +665,11 @@ PPC_FUNC(draw_options) {
         ctx.r[3] = maki;
         ctx.r[4] = elem;
         ctx.r[5] = on ? 1 : 0;
-        sub_0228D1B4(ctx, base);
+        sub_0228D18C(ctx, base);
         ctx = saved;
     };
-    // the texts are GUI objects, not instances: hidden as the game hides unused rows' texts (FUN_02AF349C(text, 0)),
-    // shown by their flag bit 0 (what FUN_02ADB830 does when showing; hiding with it walks instance children)
+    // the texts are GUI objects, not instances: hidden as the game hides unused rows' texts (FUN_02af2dd4(text, 0)),
+    // shown by their flag bit 0 (what FUN_02adb168 does when showing; hiding with it walks instance children)
     const auto show_text = [&](uint32_t text, bool on) {
         if (!text) return;
         if (on) {
@@ -679,7 +679,7 @@ PPC_FUNC(draw_options) {
         const ppc::Context saved = ctx;
         ctx.r[3] = text;
         ctx.r[4] = 0;
-        sub_02AF349C(ctx, base);
+        sub_02AF2DD4(ctx, base);
         ctx = saved;
     };
     const auto plate = [&](uint32_t slot) { return plates ? ppc::ld32(base, plates + slot * 4) : 0; };
@@ -702,16 +702,16 @@ PPC_FUNC(draw_options) {
     }
 }
 
-// The pouch window: uIDCommonPauch, the shared pouch widget (sID sub-unit 2 (FUN_0213F040) +0x94; the same one
-// Store Items shows). Store Items draws it every frame with FUN_026697C0: open it (vf+0xE4 1, flags +0xC |= 0x100000,
-// +0x3F4 = 8, its animation +0x2D4), reset (FUN_0265E308), frame "Item List" (FUN_0265F010 mode 1), layout
-// (FUN_0265FAE4 8), then FUN_026611B8(widget, slots, entries, page (1-based), pages, 0, flags 0x800, &out, 8) lists 8
+// The pouch window: uIDCommonPauch, the shared pouch widget (sID sub-unit 2 (FUN_0214014c) +0x94; the same one
+// Store Items shows). Store Items draws it every frame with FUN_02669b8c: open it (vf+0xE4 1, flags +0xC |= 0x100000,
+// +0x3F4 = 8, its animation +0x2D4), reset (FUN_0265e6d4), frame "Item List" (FUN_0265f3dc mode 1), layout
+// (FUN_0265feb0 8), then FUN_02661584(widget, slots, entries, page (1-based), pages, 0, flags 0x800, &out, 8) lists 8
 // slots (u16 id + u16 count each) from any slot array - entries: 8 x 0x18 bytes, +1 highlighted, +2 shown, +4 slot
 // index. The preview runs the same steps with the set's slots in a guest buffer of its own; the pouch is not touched.
 uint32_t g_preview_slots = 0, g_preview_entries = 0;  // guest buffers (made once)
 
 uint32_t pouch_widget(ppc::Context& ctx, uint8_t* base) {
-    const uint32_t ui = call(ctx, base, sub_0213F040, ppc::ld32(base, 0x10314578), 2);  // sID::mpInstance
+    const uint32_t ui = call(ctx, base, sub_0214014C, ppc::ld32(base, 0x10314278), 2);  // sID::mpInstance
     return ui ? ppc::ld32(base, ui + 0x94) : 0;
 }
 
@@ -733,9 +733,9 @@ void show_preview(ppc::Context& ctx, uint8_t* base, int set) {
         ppc::st8(base, e + 2, 1);
         ppc::st16(base, e + 4, static_cast<uint16_t>(page * 8 + i));
     }
-    // sID's pouch-window selector (FUN_0214218C(sID) -> u32): Store Items sets 6 before drawing (8 for other screens;
+    // sID's pouch-window selector (FUN_021431f0(sID) -> u32): Store Items sets 6 before drawing (8 for other screens;
     // the box menu resets it to 0 when it opens)
-    if (const uint32_t sel = call(ctx, base, sub_0214218C, ppc::ld32(base, 0x10314578), 0)) ppc::st32(base, sel, 6);
+    if (const uint32_t sel = call(ctx, base, sub_021431F0, ppc::ld32(base, 0x10314278), 0)) ppc::st32(base, sel, 6);
     const ppc::Context saved = ctx;
     const auto run = [&](auto fn, uint32_t a, uint32_t b, uint32_t c) {
         ctx = saved;
@@ -746,25 +746,25 @@ void show_preview(ppc::Context& ctx, uint8_t* base, int set) {
         fn(ctx, base);
     };
     ppc::st16(base, w + 0x3F4, 8);
-    ctx = saved;  // its animation (+0x2D4), as FUN_026697C0
+    ctx = saved;  // its animation (+0x2D4), as FUN_02669b8c
     ctx.r[3] = w + 0x2D4;
     ctx.r[4] = 0;
-    sub_0203787C(ctx, base);
+    sub_02037424(ctx, base);
     ctx = saved;
     ctx.r[3] = w + 0x2D4;
     ctx.r[4] = 3;
     ctx.r[5] = 0;
-    sub_02037600(ctx, base);
+    sub_020371A8(ctx, base);
     ppc::st32(base, w + 0xC, ppc::ld32(base, w + 0xC) | 0x100000);
     ctx = saved;
     ctx.r[3] = w;
     ctx.r[4] = 1;
     ppc::call_indirect(ctx, base, ppc::ld32(base, ppc::ld32(base, w) + 0xE4));
-    run(sub_0265E308, 0, 0, 0);
-    run(sub_0265F010, 1, 0, 0);
-    run(sub_0265FAE4, 8, 0, 0);
+    run(sub_0265E6D4, 0, 0, 0);
+    run(sub_0265F3DC, 1, 0, 0);
+    run(sub_0265FEB0, 8, 0, 0);
     ppc::st16(base, w + 0x52C, 0);
-    // FUN_026611B8(widget, slots, entries, page, pages, mode, flags, &out, 8): the last two on the stack as the game
+    // FUN_02661584(widget, slots, entries, page, pages, mode, flags, &out, 8): the last two on the stack as the game
     // passes them (r10 = &out, 8 at sp+8)
     ctx = saved;
     ctx.r[1] -= 0x40;
@@ -777,7 +777,7 @@ void show_preview(ppc::Context& ctx, uint8_t* base, int set) {
     ctx.r[9] = 0x800;
     ctx.r[10] = g_preview_entries + 8 * 0x18;
     ppc::st32(base, static_cast<uint32_t>(ctx.r[1]) + 8, 8);
-    sub_026611B8(ctx, base);
+    sub_02661584(ctx, base);
     ctx = saved;
     // Store Items' widget also has state bits 0x30000 (+0xC; 44930040 there, 44900040 from the steps alone): without
     // them the window is not drawn (seen in a window 2026-10-28)
@@ -788,7 +788,7 @@ void show_preview(ppc::Context& ctx, uint8_t* base, int set) {
 void hide_preview(ppc::Context& ctx, uint8_t* base) {
     if (g_shown_set < 0) return;
     g_shown_set = -1;
-    if (const uint32_t sel = call(ctx, base, sub_0214218C, ppc::ld32(base, 0x10314578), 0)) ppc::st32(base, sel, 0);
+    if (const uint32_t sel = call(ctx, base, sub_021431F0, ppc::ld32(base, 0x10314278), 0)) ppc::st32(base, sel, 0);
     if (const uint32_t w = pouch_widget(ctx, base)) {  // closed as it was opened: vf+0xE4(widget, 0)
         const ppc::Context saved = ctx;
         ctx.r[3] = w;
@@ -798,13 +798,13 @@ void hide_preview(ppc::Context& ctx, uint8_t* base) {
     }
 }
 
-// The box menu screen (uIDLobbyMaki::drawBoxMenu? 0x02687D38, r3 = screen, r4 = state) places the sub-list pop-up
-// (children 0x22F, 0x1DA, 600) at the chosen option's row: y = base + row slot * row height (constants 0x1005C520..34;
+// The box menu screen (uIDLobbyMaki::drawBoxMenu? 0x026880D8, r3 = screen, r4 = state) places the sub-list pop-up
+// (children 0x22F, 0x1DA, 600) at the chosen option's row: y = base + row slot * row height (constants 0x1005C3C0..34;
 // slot = option, + 1 past option 2), moved up if it would leave the screen. With Item Sets the slots differ (Item
 // Sets 3, options 3-5 in slots 5-7): placed again by the same formula.
 PPC_FUNC(draw_box_menu) {
     const uint32_t screen = ctx.r[3], state = ctx.r[4];
-    sub_02687D38__orig(ctx, base);
+    sub_026880D8__orig(ctx, base);
     // the set list: the pouch window shows the highlighted set (state +8 = the sub-list cursor)
     if (g_pick != Pick::None && ppc::ld16(base, state + 0xA) == 1) show_preview(ctx, base, static_cast<int16_t>(ppc::ld16(base, state + 8)));
     else if (g_shown_set >= 0) hide_preview(ctx, base);
@@ -813,8 +813,8 @@ PPC_FUNC(draw_box_menu) {
     const uint16_t option = ppc::ld16(base, state + 6);
     if (option < 3 || option > kOption) return;
     const int slot = option == kOption ? 3 : option + 2;
-    const float row = ppc::ldf32(base, 0x1005C520), extra = ppc::ldf32(base, 0x1005C524), pad = ppc::ldf32(base, 0x1005C530),
-                limit = ppc::ldf32(base, 0x1005C534);
+    const float row = ppc::ldf32(base, 0x1005C3C0), extra = ppc::ldf32(base, 0x1005C3C4), pad = ppc::ldf32(base, 0x1005C3D0),
+                limit = ppc::ldf32(base, 0x1005C3D4);
     const float sub_h = static_cast<float>(static_cast<int16_t>(ppc::ld16(base, state + 0xE))) * row + extra;
     const float y_row = static_cast<float>(slot) * row;
     const float y0 = static_cast<float>(static_cast<int32_t>(ppc::ld32(base, screen + 0x106 * 4))) + y_row;
@@ -825,10 +825,10 @@ PPC_FUNC(draw_box_menu) {
         ctx.r[3] = screen;
         ctx.r[4] = id;
         ctx.r[5] = 1;
-        sub_02A72CE8(ctx, base);  // the child
+        sub_02A72620(ctx, base);  // the child
         if (!ctx.r[3]) continue;
         ctx.f[1].ps0 = static_cast<double>(y + shift);
-        sub_02ADEF64(ctx, base);  // its y
+        sub_02ADE89C(ctx, base);  // its y
     }
     ctx = saved;
 }
@@ -881,10 +881,10 @@ void register_item_sets(const std::filesystem::path& save_dir, std::function<voi
     set_text(0x2E, kLabelBase + 1, "Load Item Set");
     set_text(0x2F, kHelpBase, "Save your pouch as an item set and\r\nrefill it from the Item Box in one go.", kHelpCaller);
     menu_texts();
-    ppc::set_override(0x021F0E7C, &box_menu_step);
-    ppc::set_override(0x026A6B80, &draw_options);
-    ppc::set_override(0x02687D38, &draw_box_menu);
-    ppc::set_override(0x02AE1E40, &update_transforms);
+    ppc::set_override(0x021F146C, &box_menu_step);
+    ppc::set_override(0x026A6E84, &draw_options);
+    ppc::set_override(0x026880D8, &draw_box_menu);
+    ppc::set_override(0x02AE1778, &update_transforms);
 }
 
 void set_frame_capture(std::function<void()> capture) { g_capture = std::move(capture); }

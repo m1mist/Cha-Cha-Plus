@@ -1,8 +1,8 @@
 // Charm Table Fix for Cha-Cha (MH3U US v32): every talisman can come out of every save. A Cha-Cha plugin
 // (include/chacha_plugin.h, docs/modding.md).
 //
-// The bug (docs/research-log.md, 2026-11-11 "Charm tables"): the talisman generator 0x0217F63C (makeTalisman?)
-// draws every number from the game's RNG slot 1, sGame+0x42 (sGame = *(0x101FDB9C); 0x0211971C steps a slot
+// The bug (docs/research-log.md, 2026-11-11 "Charm tables"): the talisman generator 0x0217FE74 (makeTalisman?)
+// draws every number from the game's RNG slot 1, sGame+0x42 (sGame = *(0x101FD9CC); 0x0211ACF4 steps a slot
 // x -> (x || 1) * 176 mod 65363). 65363 = 163 * 401 is not prime, so the 65362 states fall into 17 separate
 // cycles: twelve of 5400, two of 200 and three of 54 states. The save keeps the state and nothing reseeds it, so a
 // save never leaves the cycle it started on, and a talisman is decided by the state its first draw starts from:
@@ -21,12 +21,12 @@
 
 namespace {
 
-constexpr uint32_t kMakeTalisman = 0x0217F63C;
-constexpr uint32_t kGamePtr = 0x101FDB9C;  // sGame::mpInstance
+constexpr uint32_t kMakeTalisman = 0x0217FE74;
+constexpr uint32_t kGamePtr = 0x101FD9CC;  // sGame::mpInstance
 constexpr uint32_t kSlot1 = 0x42;          // sGame +0x40: u16 RNG slots 0..3
 constexpr uint32_t kModulus = 65363, kMultiplier = 176;
 constexpr int kMaxDraws = 64;  // the generator makes 3 to 8
-constexpr const char* kGameSha1 = "d97aabfc5a45362f88dfacb09f23c6dcae6faac2";  // MH3U US v32
+constexpr const char* kGameSha1 = "cb908d6807891f4edb5b00fdf2a1d5688ee0b935";  // MH3G HD JP v96
 
 const ChaChaApi* api = nullptr;
 ChaChaPlugin* self = nullptr;

@@ -60,7 +60,7 @@ int main(int argc, char** argv) {
     std::ostringstream orig_table;  // overridden functions: address -> <name>__orig (mods chain hooks onto these)
     size_t orig_count = 0;
 
-    stdfs::path elf = repo / "extracted/0005000e10118300_v32/code/MH3G_Cafe_US.elf";
+    stdfs::path elf = repo / "extracted/0005000010104d00_v96/code/MH3G_Cafe.elf";
     if (stdfs::exists(elf)) {
         std::string err;
         auto img = recomp::load_image(elf, &err);

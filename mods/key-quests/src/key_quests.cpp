@@ -10,7 +10,7 @@
 // community wiki: the bit they lead to is set by game code, not by quest data. Checked against the wiki's 1-7 star
 // village key quests. Table generated from the game's quest data (412 quests) - addresses and numbers are for v32.
 //
-// The list: sLobby::questListStep? FUN_021E3978(sLobby, list): list+1 state (0 = browsing), +0x1AC 0xFF while no
+// The list: sLobby::questListStep? FUN_021e411c(sLobby, list): list+1 state (0 = browsing), +0x1AC 0xFF while no
 // page turn runs, +0x18 rows on this page, +0x1A u16[8] their quest numbers; rows on the TV image (1920 x 1080) at
 // x 1295-1755, centred at y 336 + 54 * row (src/game/menu_mouse.cpp).
 #include "chacha_plugin.h"
@@ -25,8 +25,8 @@
 
 namespace {
 
-constexpr uint32_t kQuestList = 0x021E3978;
-constexpr const char* kGameSha1 = "d97aabfc5a45362f88dfacb09f23c6dcae6faac2";  // MH3U US v32
+constexpr uint32_t kQuestList = 0x021E411C;
+constexpr const char* kGameSha1 = "cb908d6807891f4edb5b00fdf2a1d5688ee0b935";  // MH3G HD JP v96
 
 enum Kind : uint8_t { kKey = 1, kPick = 2, kUrgent = 3 };
 struct Entry {

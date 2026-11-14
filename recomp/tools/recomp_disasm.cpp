@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
     }
     stdfs::path repo = argv[1];
     std::string err;
-    auto img = recomp::load_image(repo / "extracted/0005000e10118300_v32/code/MH3G_Cafe_US.elf", &err);
+    auto img = recomp::load_image(repo / "extracted/0005000010104d00_v96/code/MH3G_Cafe.elf", &err);
     if (!img) {
         std::fprintf(stderr, "load failed: %s\n", err.c_str());
         return 1;

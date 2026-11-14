@@ -23,12 +23,12 @@
 
 namespace mh3u::fs {
 
-inline constexpr std::uint64_t kBaseTitleId = 0x0005000010118300ull;    // Monster Hunter 3 Ultimate (US)
-inline constexpr std::uint64_t kUpdateTitleId = 0x0005000E10118300ull;  // its update
-inline constexpr std::uint32_t kTargetUpdateVersion = 32;
-// SHA-1 of the RPX this port is recompiled from (config/target.txt: US, update v32).
-inline constexpr const char* kTargetRpxSha1 = "d97aabfc5a45362f88dfacb09f23c6dcae6faac2";
-inline constexpr const char* kRpxName = "MH3G_Cafe_US.rpx";
+inline constexpr std::uint64_t kBaseTitleId = 0x0005000010104D00ull;    // Monster Hunter 3G HD Ver. (JP)
+inline constexpr std::uint64_t kUpdateTitleId = 0x0005000E10104D00ull;  // its update
+inline constexpr std::uint32_t kTargetUpdateVersion = 96;
+// SHA-1 of the RPX this port is recompiled from (config/target.txt: JP, v96).
+inline constexpr const char* kTargetRpxSha1 = "cb908d6807891f4edb5b00fdf2a1d5688ee0b935";
+inline constexpr const char* kRpxName = "MH3G_Cafe.rpx";
 
 struct Title {
     std::uint64_t id = 0;

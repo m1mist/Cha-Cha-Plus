@@ -217,8 +217,8 @@ std::optional<GameImage> open_game(const std::vector<stdfs::path>& sources, std:
         std::string list;
         for (const auto& id : ids) list += (list.empty() ? "" : ", ") + id;
         if (update) return fail("Found the update but not the game itself (" + hex16(kBaseTitleId) + "). Add the base game too.");
-        return fail("This is not Monster Hunter 3 Ultimate (US, " + hex16(kBaseTitleId) + "); found " + list +
-                    ". Other regions are not supported: the port is built from the US executable.");
+        return fail("This is not Monster Hunter 3G HD Ver. (JP, " + hex16(kBaseTitleId) + "); found " + list +
+                    ". Other regions are not supported: the port is built from the JP executable.");
     }
     g.base = *base;
     if (update) g.update = *update;
@@ -234,7 +234,7 @@ std::optional<GameImage> open_game(const std::vector<stdfs::path>& sources, std:
         if (update->version != kTargetUpdateVersion)
             return fail("Found update v" + std::to_string(update->version) + "; this port needs update v" +
                         std::to_string(kTargetUpdateVersion) + ", the last one.");
-        return fail("The game's executable does not match the US v32 release (SHA-1 " + g.rpx_sha1 +
+        return fail("The game's executable does not match the JP v96 release (SHA-1 " + g.rpx_sha1 +
                     "). The dump may be modified or damaged: dump it again.");
     }
     return g;

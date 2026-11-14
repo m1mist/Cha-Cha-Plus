@@ -17,11 +17,11 @@ from collections import Counter, defaultdict
 
 XFS_MAGIC = 0x00534658  # "XFS\0" written as a big-endian u32
 ARC_MAGIC = 0x00435241
-BASE = "extracted/0005000010118300_v0"
-UPDATE = "extracted/0005000e10118300_v32"
+BASE = "extracted/0005000010104d00_v96"
+UPDATE = "extracted/0005000010104d00_v96"
 
 # Property type codes (the MtProperty type, +4 bits 16..23). 5 and 6 are confirmed from createProperty helpers
-# (0x020711C0 writes 5 for a u16 field, 0x0207126C writes 6 for a u32 field); the rest follow from the value
+# (0x02071250 writes 5 for a u16 field, 0x020712FC writes 6 for a u32 field); the rest follow from the value
 # sizes stored in the files and are checked by `scan` (every object must consume exactly its size field).
 TYPE_NAMES = {
     0x01: "class", 0x02: "classref", 0x03: "bool", 0x04: "u8", 0x05: "u16", 0x06: "u32", 0x07: "u64",

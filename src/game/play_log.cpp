@@ -2,10 +2,10 @@
 // (windpress push, weapon attacks, the talk marker over villagers; issues #2, #7). Debug only, nothing changes.
 //
 // Wraps (status: wip, the originals run unchanged):
-//   FUN_0227E138 cameraPadCopy?  (r3 = uGameCamera): copies sAppPad buttons / right stick into the camera block, once a
-//                                frame in the village, the field and quests, right after FUN_0227EB7C stored the
+//   FUN_0227e110 cameraPadCopy?  (r3 = uGameCamera): copies sAppPad buttons / right stick into the camera block, once a
+//                                frame in the village, the field and quests, right after FUN_0227eb54 stored the
 //                                hunter at block +0x690 - so the hunter is known every frame
-//   0x025F2810 uIDCockpitAbovehead::vf63 (r3 = the marker): places the display above the hunter's head and picks its
+//   0x025F2B90 uIDCockpitAbovehead::vf63 (r3 = the marker): places the display above the hunter's head and picks its
 //                                animation (+0x2E8 child, its +0xC = animation 1 / 0x1D, 9 / 0x1E with pad +0x714 7)
 // Lines (CSV): "p" = time ms, line number, sMain+0x7C (frame time, 1/60 s units), hunter cUnit+0x1C, position
 // (pad block +0xE0/E4/E8), yaw (+0x120), input bits (+0x1C8), pad block bytes +0x00..+0x3F and +0x700..+0x71F (hex);
@@ -33,7 +33,7 @@
 namespace mh3u::game {
 namespace {
 
-constexpr uint32_t kSMain = 0x103CEA44;  // sMain::mpInstance
+constexpr uint32_t kSMain = 0x103CE704;  // sMain::mpInstance
 FILE* g_file = nullptr;
 uint32_t g_frames = 0;
 std::chrono::steady_clock::time_point g_start;
@@ -41,13 +41,13 @@ std::function<void(uint32_t)> g_watch;  // arms the position-write watch on a gu
 constexpr uint32_t kPlayerSize = 0x2900, kPadSize = 0x1600;
 uint32_t g_prev_player = 0, g_prev_pad = 0;
 std::vector<uint8_t> g_old_player, g_old_pad;
-constexpr uint32_t kSEnemy = 0x10313260, kSAppPad = 0x10312BB0;  // sEnemy / sAppPad ::mpInstance
+constexpr uint32_t kSEnemy = 0x10312F60, kSAppPad = 0x103127F0;  // sEnemy / sAppPad ::mpInstance
 constexpr uint32_t kMonsterSize = 0x2400;                         // the uEmNNN classes are 0x2230..0x22D0 bytes
 uint32_t g_prev_monster = 0;
 std::vector<uint8_t> g_old_monster;
-// the village talk arrow: the stage's uGameEffectModel (vtable 0x10035CE4, found by the unit log) and its uGameEffect
+// the village talk arrow: the stage's uGameEffectModel (vtable 0x10035B94, found by the unit log) and its uGameEffect
 // (+0xE38); their changed words go on the "d" line as E<offset> / G<offset>
-constexpr uint32_t kEffectModelVtable = 0x10035CE4, kEffectModelSize = 0xE40, kEffectSize = 0x230;
+constexpr uint32_t kEffectModelVtable = 0x10035B94, kEffectModelSize = 0xE40, kEffectSize = 0x230;
 uint32_t g_effect_model = 0, g_prev_model = 0, g_prev_effect = 0;
 std::vector<uint8_t> g_old_model, g_old_effect;
 
@@ -73,7 +73,7 @@ void diff(const uint8_t* base, char tag, uint32_t a, uint32_t n, uint32_t& prev,
 
 PPC_FUNC(camera_pad_copy) {
     const uint32_t cam = ctx.r[3];
-    sub_0227E138__orig(ctx, base);
+    sub_0227E110__orig(ctx, base);
     const uint32_t player = ppc::ld32(base, ppc::ld32(base, cam + 0x8E0) + 0x690);
     if (!player) return;
     const uint32_t pad = ppc::ld32(base, player + 0xE30);
@@ -120,7 +120,7 @@ std::map<uint32_t, std::pair<uint32_t, uint32_t>> g_units;  // unit -> (line, +0
 std::map<uint32_t, std::vector<uint32_t>> g_line_units;     // line -> units seen last time
 PPC_FUNC(unit_line) {
     const uint32_t units = ctx.r[3], line = ctx.r[4];
-    sub_02C0E43C__orig(ctx, base);
+    sub_02C0DD94__orig(ctx, base);
     std::vector<uint32_t> now;
     for (uint32_t u = ppc::ld32(base, units + line * 0x18 + 0x40), n = 0; u && n < 4096; u = ppc::ld32(base, u + 0x14), ++n)
         now.push_back(u);
@@ -149,7 +149,7 @@ PPC_FUNC(unit_line) {
 
 PPC_FUNC(above_head) {
     const uint32_t self = ctx.r[3];
-    sub_025F2810__orig(ctx, base);
+    sub_025F2B90__orig(ctx, base);
     const uint32_t child = ppc::ld32(base, self + 0x2E8);
     std::fprintf(g_file, "a,%.1f,%08X,%d\n", now_ms(), self,
                  child ? static_cast<int>(ppc::ld32(base, child + 0xC)) : -1);
@@ -167,9 +167,9 @@ void register_play_log(std::function<void(uint32_t)> watch) {
     g_start = std::chrono::steady_clock::now();
     g_watch = std::move(watch);
     std::printf("play log: %s\n", path.c_str());
-    ppc::set_override(0x0227E138, &camera_pad_copy);
-    ppc::set_override(0x025F2810, &above_head);
-    ppc::set_override(0x02C0E43C, &unit_line);
+    ppc::set_override(0x0227E110, &camera_pad_copy);
+    ppc::set_override(0x025F2B90, &above_head);
+    ppc::set_override(0x02C0DD94, &unit_line);
 }
 
 }  // namespace mh3u::game

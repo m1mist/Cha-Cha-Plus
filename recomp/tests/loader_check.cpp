@@ -30,7 +30,7 @@ static int failures = 0;
 
 int main(int argc, char** argv) {
     stdfs::path repo = argc > 1 ? argv[1] : ".";
-    stdfs::path elf_path = repo / "extracted/0005000e10118300_v32/code/MH3G_Cafe_US.elf";
+    stdfs::path elf_path = repo / "extracted/0005000010104d00_v96/code/MH3G_Cafe.elf";
     if (!stdfs::exists(elf_path)) {
         std::printf("skipped: no %s\n", elf_path.string().c_str());
         return 77;
@@ -43,7 +43,7 @@ int main(int argc, char** argv) {
     }
     // The RPX as stored in the dump, inflated by our own decoder, equals wiiurpxtool's ELF section by section.
     {
-        std::ifstream rf(elf_path.parent_path() / "MH3G_Cafe_US.rpx", std::ios::binary);
+        std::ifstream rf(elf_path.parent_path() / "MH3G_Cafe.rpx", std::ios::binary);
         const std::vector<uint8_t> rpx((std::istreambuf_iterator<char>(rf)), std::istreambuf_iterator<char>());
         auto from_rpx = recomp::ElfImage::parse(rpx, &err);
         auto from_elf = recomp::ElfImage::load(elf_path, &err);

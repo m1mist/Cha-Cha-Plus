@@ -1,15 +1,15 @@
 // Monster HP: where a monster's maximum HP is set, for monster HP scaling (always on, no MODS switch).
 //
-// Replaces: FUN_0259FB84 uEnemy::setMaxHp? (called by FUN_0259FC98 at spawn from FUN_0259FCD0, and by the vf48 of
+// Replaces: FUN_0259ff64 uEnemy::setMaxHp? (called by FUN_025a0078 at spawn from FUN_025a00b0, and by the vf48 of
 // uEm027/033/036/040 when they change form). Status: wip - read in Ghidra (docs/research-log.md, "Monster HP"); the
 // original runs, then on a hub quest the maximum HP is scaled for the number of hunters (kHunterScale), as the game's
-// own x0.55 is applied - in this function, before the spawn code goes on (FUN_0259FCD0 -> FUN_0259FC98). Every rank
+// own x0.55 is applied - in this function, before the spawn code goes on (FUN_025a00b0 -> FUN_025a0078). Every rank
 // scales by the same fraction of its own HP: the rank is in the game's stat row. Each spawn is logged.
 //
 // What the game does (r3 = the uEnemy, r4 = base HP from em_statusNN, the rEnemyStatus at uEnemy+0x1DE0, word 0):
 //   state = *(uEnemy + 0x1BE0)
-//   row   = FUN_0259E3B4(enemy, 0): a 0x20-byte row of floats in a table sEnemy keeps per quest monster set
-//           (FUN_020F3B9C(sEnemy, set id)), picked by the byte state+0x8E8 (+1, +2: other stats); row[0] = HP factor
+//   row   = FUN_0259e794(enemy, 0): a 0x20-byte row of floats in a table sEnemy keeps per quest monster set
+//           (FUN_020f5100(sEnemy, set id)), picked by the byte state+0x8E8 (+1, +2: other stats); row[0] = HP factor
 //   *(state + 0x8BC) = (int)(base * row[0])            maximum HP
 //   if the current quest has flag 0x100000 or 0x10 (quest data +0x1E4) and sGame+0x1B9 != 1: max HP *= 0.55
 // Current quest data: *(*(sQuest + 0xB050) + 0x3C); its byte +0x24F is the quest rank (sEnemy+0x4284, 0..3).
@@ -23,7 +23,7 @@
 namespace mh3u::game {
 namespace {
 
-constexpr uint32_t kSQuest = 0x1031537C, kSGame = 0x101FDB9C, kSLobby = 0x103147A0;
+constexpr uint32_t kSQuest = 0x1031507C, kSGame = 0x101FD9CC, kSLobby = 0x103144A0;
 
 // HP for the number of hunters on a hub quest (user's choice 2026-10-28, MH4U-style): 1 -> 0.65 ... 4 -> 1.0 of the
 // game's hub HP. Offline there is always one hunter.
@@ -33,7 +33,7 @@ std::atomic<bool> g_scaling{true};  // the setting; off: the game's own HP every
 
 PPC_FUNC(set_max_hp) {
     const uint32_t enemy = ctx.r[3], base_hp = ctx.r[4];
-    sub_0259FB84__orig(ctx, base);
+    sub_0259FF64__orig(ctx, base);
     const uint32_t state = ppc::ld32(base, enemy + 0x1BE0);
     if (!state) return;
     const uint32_t game_hp = ppc::ld32(base, state + 0x8BC);
@@ -65,7 +65,7 @@ PPC_FUNC(set_max_hp) {
 
 void register_monster_hp(bool scaling) {
     g_scaling = scaling;
-    ppc::set_override(0x0259FB84, &set_max_hp);
+    ppc::set_override(0x0259FF64, &set_max_hp);
 }
 void set_monster_hp_scaling(bool on) { g_scaling = on; }
 

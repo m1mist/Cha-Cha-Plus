@@ -2,7 +2,7 @@
 // of MH Wilds, MH Rise or the classic games. A Cha-Cha plugin (include/chacha_plugin.h, docs/modding.md).
 //
 // How it reads the game (docs/research-log.md, 2026-11-02 "Damage numbers"):
-//   uEnemy::damageCheck? 0x025CB37C (r3 = the uEnemy) runs once a frame per monster. state = *(uEnemy + 0x1BE0):
+//   uEnemy::damageCheck? 0x025CB6FC (r3 = the uEnemy) runs once a frame per monster. state = *(uEnemy + 0x1BE0):
 //     state+0x8EC  int16[8]  damage taken this frame per part (physical + element), summed and taken off the HP
 //     state+0xAB4  int16     further damage (taken off the HP the same way, not by part)
 //     state+0x8B8  int32     HP, state+0x8BC max HP
@@ -26,8 +26,8 @@
 
 namespace {
 
-constexpr uint32_t kDamageCheck = 0x025CB37C;
-constexpr const char* kGameSha1 = "d97aabfc5a45362f88dfacb09f23c6dcae6faac2";  // MH3U US v32
+constexpr uint32_t kDamageCheck = 0x025CB6FC;
+constexpr const char* kGameSha1 = "cb908d6807891f4edb5b00fdf2a1d5688ee0b935";  // MH3G HD JP v96
 
 enum Style { kWilds, kRise, kClassic, kStyles };
 const char* const kStyleNames[kStyles] = {"Wilds", "Rise", "Classic"};
@@ -228,7 +228,7 @@ void draw_popup(const Popup& p, float age, float base_px) {
         tx.x = sx + p.dx * g_set.scale;
         tx.y = sy - ease_out(t) * px * 1.4f;
         tx.color = (p.other ? 0xB4B4B400u : 0xFFFFFF00u) | alpha;
-        tx.outline_color = 0x10080400u | (alpha * 220 / 255);
+        tx.outline_color = 0x100801E0u | (alpha * 220 / 255);
         tx.outline = std::max(1.5f, px * 0.075f);
         api->draw_text(&tx, text);
         break;

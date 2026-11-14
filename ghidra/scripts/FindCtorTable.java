@@ -15,7 +15,7 @@ public class FindCtorTable extends GhidraScript {
         Memory mem = currentProgram.getMemory();
         MemoryBlock text = mem.getBlock(".text");
         int found = 0;
-        for (Reference r : getReferencesTo(toAddr(0x02d63178L))) {
+        for (Reference r : getReferencesTo(toAddr(0x02d62ad0L))) {
             if (getFunctionContaining(r.getFromAddress()) != null) continue;
             Address start = initStart(r.getFromAddress());
             byte[] pat = new byte[] { (byte) (start.getOffset() >> 24), (byte) (start.getOffset() >> 16),

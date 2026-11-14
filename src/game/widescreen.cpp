@@ -2,16 +2,16 @@
 // change; our own code). Hooks inside game functions (config/hooks.txt), status: wip - seen in headless captures
 // at 2560x1080 and 3840x1080 in the village and Port Tanzia, not yet in a hunt.
 //
-// - Camera: each frame sCamera::vf6 (0x02BA0238) sets every camera's aspect (uCamera +0x38) from its viewport's
-//   integer rectangle, f11 = (x1 - x0) / (y1 - y0) at 0x02BA0474 (r0 = width, r8 = height), stored next and turned into
+// - Camera: each frame sCamera::vf6 (0x02B9FB70) sets every camera's aspect (uCamera +0x38) from its viewport's
+//   integer rectangle, f11 = (x1 - x0) / (y1 - y0) at 0x02B9FDAC (r0 = width, r8 = height), stored next and turned into
 //   the projection afterwards. For the full-screen 16:9 viewport (the TV's) the aspect is multiplied by the widescreen
 //   factor: the vertical field of view stays, more is seen to the sides. The renderer makes the TV-sized targets that
 //   much wider (gfx::set_widescreen), so the game's 1280x720 viewport covers the wider image.
 // - Name tags: the tags over party members and Felynes are placed in HUD space as x = fraction x width (fraction 0..1
-//   across the screen from the camera's projection, width from the screen size function 0x02617CE0). The renderer
+//   across the screen from the camera's projection, width from the screen size function 0x02618060). The renderer
 //   squeezes the HUD into the middle 16:9, so the fraction is spread around the centre by the same factor:
-//   ((fraction - 0.5) x factor + 0.5) x width, right after each fmuls f1 (0x02618214 / 0x026182BC: f7 x f8;
-//   0x026189D4 / 0x02618A7C: f0 x f7).
+//   ((fraction - 0.5) x factor + 0.5) x width, right after each fmuls f1 (0x02618594 / 0x0261863C: f7 x f8;
+//   0x02618D54 / 0x02618DFC: f0 x f7).
 #include "widescreen.h"
 
 #include <algorithm>
@@ -81,11 +81,11 @@ void set_widescreen(float k) { g_factor.store(std::clamp(std::isfinite(k) ? k : 
 float widescreen() { return factor(); }
 
 void register_widescreen() {
-    ppc::set_hook(0x02BA0474, &camera_aspect);
-    ppc::set_hook(0x02618214, &tag_x_f7_f8);
-    ppc::set_hook(0x026182BC, &tag_x_f7_f8);
-    ppc::set_hook(0x026189D4, &tag_x_f0_f7);
-    ppc::set_hook(0x02618A7C, &tag_x_f0_f7);
+    ppc::set_hook(0x02B9FDAC, &camera_aspect);
+    ppc::set_hook(0x02618594, &tag_x_f7_f8);
+    ppc::set_hook(0x0261863C, &tag_x_f7_f8);
+    ppc::set_hook(0x02618D54, &tag_x_f0_f7);
+    ppc::set_hook(0x02618DFC, &tag_x_f0_f7);
 }
 
 }  // namespace mh3u::game

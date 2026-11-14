@@ -1,8 +1,8 @@
 // Game text lookups: traced (which code asks for which text - finding the code behind a menu from its labels) and
 // replaced (our own entries in place of unused "DUMMY" ones, e.g. the item box menu's Item Sets).
 //
-// Replaces: sID::vf37 0x02141DE0 = sID::getText? (this, group < 0xAF, index) -> string: the message resource kept for
-// the group at sID+0x78 (vf+0x54 on it). Every text lookup ends here: FUN_0205AD00(group, index) (302 callers) is a
+// Replaces: sID::vf37 0x02142E54 = sID::getText? (this, group < 0xAF, index) -> string: the message resource kept for
+// the group at sID+0x78 (vf+0x54 on it). Every text lookup ends here: FUN_0205ad90(group, index) (302 callers) is a
 // tail call into it through sID's vtable (+0x134), and code can call the vtable itself. Status: wip - the original
 // always runs; its result is returned unchanged unless set_text() replaced that (group, index).
 //
@@ -51,7 +51,7 @@ uint32_t guest_text(Replacement& r, uint8_t* base) {
 
 PPC_FUNC(get_text) {
     const uint32_t group = ctx.r[4], index = ctx.r[5], caller = static_cast<uint32_t>(ctx.lr);
-    sub_02141DE0__orig(ctx, base);
+    sub_02142E54__orig(ctx, base);
     {
         std::lock_guard g(g_m);
         auto it = g_replace.find({group, index, caller});
@@ -71,7 +71,7 @@ PPC_FUNC(get_text) {
 }
 
 void install() {
-    if (!g_installed) ppc::set_override(0x02141DE0, &get_text);
+    if (!g_installed) ppc::set_override(0x02142E54, &get_text);
     g_installed = true;
 }
 

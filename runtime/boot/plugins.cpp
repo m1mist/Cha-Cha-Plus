@@ -153,8 +153,8 @@ bool add_hook(uint32_t addr, ChaChaHookFn before, ChaChaHookFn after, void* user
     return true;
 }
 
-// ---- the live camera: uGameCamera's per-frame move (vtable slot 8, 0x0227EDE8) ------------------------------
-constexpr uint32_t kCameraMove = 0x0227EDE8;
+// ---- the live camera: uGameCamera's per-frame move (vtable slot 8, 0x0227EDC0) ------------------------------
+constexpr uint32_t kCameraMove = 0x0227EDC0;
 std::mutex g_cam_m;
 ChaChaCamera g_cam{};
 bool g_cam_ok = false;
@@ -164,7 +164,7 @@ void camera_after(void*, ChaChaCall* call) {
     const uint32_t cam = call->arg_r[0];
     if (!cam || !os::rt().mem || !os::rt().mem->committed(cam) || !os::rt().mem->committed(cam + 0x70)) return;
     ChaChaCamera c{};
-    // uCamera properties (uCamera::createProperty 0x02A040F0): mFarPlane 0x30, mNearPlane 0x34, mAspect 0x38,
+    // uCamera properties (uCamera::createProperty 0x02A03A28): mFarPlane 0x30, mNearPlane 0x34, mAspect 0x38,
     // mFov 0x3C, mCameraPos 0x40, mCameraUp 0x50, mTargetPos 0x60
     c.far_plane = chacha_ldf(g_base, cam + 0x30);
     c.near_plane = chacha_ldf(g_base, cam + 0x34);

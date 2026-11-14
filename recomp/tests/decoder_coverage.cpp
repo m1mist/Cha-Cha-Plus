@@ -20,7 +20,7 @@ using namespace mh3u;
 
 int main(int argc, char** argv) {
     stdfs::path repo = argc > 1 ? argv[1] : ".";
-    stdfs::path elf_path = repo / "extracted/0005000e10118300_v32/code/MH3G_Cafe_US.elf";
+    stdfs::path elf_path = repo / "extracted/0005000010104d00_v96/code/MH3G_Cafe.elf";
     if (!stdfs::exists(elf_path)) {
         std::printf("skipped: no %s\n", elf_path.string().c_str());
         return 77;

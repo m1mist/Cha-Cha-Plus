@@ -14,7 +14,7 @@ import ghidra.app.script.GhidraScript;
 import ghidra.program.model.mem.*;
 
 public class FindSecondaryVtables extends GhidraScript {
-    static final long TI_VPTR = 0x1014E0B8L;
+    static final long TI_VPTR = 0x1014DE78L;
     static final String NL = String.valueOf((char) 10);
     Memory mem;
     long tStart, tEnd;
