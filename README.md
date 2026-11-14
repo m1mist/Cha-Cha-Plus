@@ -2,18 +2,22 @@
   <img src="docs/images/cha-cha.png" width="128" alt="Cha-Cha">
 </p>
 
-<h1 align="center">Cha-Cha</h1>
+<h1 align="center">Cha-Cha (JP v96 Fork)</h1>
 
 <p align="center">
-  <b>Monster Hunter 3 Ultimate, running natively on PC.</b><br>
-  A static recompilation of the Wii U game for Windows and Linux.
+  <b>Monster Hunter 3G HD Ver. (JP v96), running natively on PC.</b><br>
+  A static recompilation of the Wii U game for Windows and Linux, ported from <a href="https://github.com/SilversRayGA/Cha-Cha-Plus">SilversRayGA/Cha-Cha-Plus</a>.
 </p>
 
 <p align="center">
-  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/SilversRayGA/Cha-Cha-modsupport?label=release&color=ecb254" alt="Latest release"></a>
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/m1mist/Cha-Cha-Plus?label=release&color=ecb254" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-3b332a" alt="Windows and Linux">
   <img src="https://img.shields.io/badge/graphics-Vulkan-3b332a" alt="Vulkan">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-3b332a" alt="GPL-3.0"></a>
+</p>
+
+<p align="center">
+  <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
 <p align="center">
@@ -35,12 +39,13 @@ reimplementation of the Wii U system libraries it uses, with graphics on Vulkan 
 not an emulator, and there is no emulator code in it.
 
 > [!IMPORTANT]
-> **No game files are included.** You need your own copy of **Monster Hunter 3 Ultimate (US) with update v32**.
+> **No game files are included.** You need your own copy of **Monster Hunter 3G HD Ver. (JP) with update v96** (Title ID `0005000010104D00`, `MH3G_Cafe.rpx`).
+> For the US v32 release, see the upstream repository [SilversRayGA/Cha-Cha-Plus](https://github.com/SilversRayGA/Cha-Cha-Plus).
 > Cha-Cha is a fan project, not affiliated with or endorsed by Capcom or Nintendo.
 
 ## How to install
 
-You need your own **Monster Hunter 3 Ultimate (US) with update v32** (a `.wua` file, or the game and update folders).
+You need your own **Monster Hunter 3G HD Ver. (JP) with update v96** (a `.wua` file, or the game and update folders).
 
 **Windows**
 1. Download `Cha-Cha-<version>-windows-x64.zip` from [Releases](../../releases/latest).
@@ -131,7 +136,7 @@ These are part of the game. Monster HP scaling can be switched off in Settings �
 
 1. **Start Cha-Cha.** On the first start a setup screen asks for your game.
 2. **Point it at your dump:** a `.wua` archive, or the game and update folders (`code`, `content`, `meta`). Cha-Cha
-   checks that it is the US v32 executable and reads the files where they are; nothing is copied.
+   checks that it is the JP v96 executable (`0005000010104D00` / `MH3G_Cafe.rpx`) and reads the files where they are; nothing is copied.
 3. **Wait a few seconds** while the game's shaders are translated for your PC. This happens once.
 
 Your **data folder** keeps settings, saves, caches, quests and texture packs:
@@ -300,8 +305,9 @@ The details are in [docs/online.md](docs/online.md).
 
 The build translates **your own dump's** executable into C++, so put a dump in place first.
 
-1. Put your dump at `game/mh3u.wua` ([game/README.md](game/README.md)), then run
+1. Put your JP v96 `.wua` dump in `game/` (e.g. `game/mh3g.wua`, see [game/README.md](game/README.md)), then run
    `powershell -File scripts/extract.ps1` and `powershell -File scripts/fingerprint.ps1`.
+   `config/target.txt` expects `0005000010104d00_v96` (`MH3G_Cafe.rpx`, SHA-1 `cb908d6807891f4edb5b00fdf2a1d5688ee0b935`).
 2. **Windows:** Visual Studio 2026 with "Desktop development with C++" and the Vulkan SDK
    ([tools/README.md](tools/README.md)):
 
@@ -369,5 +375,5 @@ Monster Hunter is a trademark of Capcom. Wii U is a trademark of Nintendo.
 
 Cha-Cha is free software under the **GNU General Public License v3.0** ([LICENSE](LICENSE)): you may use, study,
 change and share it, and if you share a changed version you share its source under the same licence. Third-party
-libraries keep their own licences. The licence covers Cha-Cha's own code only, not the game: Monster Hunter 3
-Ultimate and everything translated from it remain Capcom's.
+libraries keep their own licences. The licence covers Cha-Cha's own code only, not the game: Monster Hunter 3G HD Ver. /
+Monster Hunter 3 Ultimate and everything translated from it remain Capcom's.
